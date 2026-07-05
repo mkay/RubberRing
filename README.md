@@ -21,7 +21,11 @@ manual override.
 - **Automatic beat grid** — a dependency-free tempo estimator (onset-flux
   autocorrelation with a comb filter) finds BPM and a downbeat; the grid is always
   hand-editable.
-- **Snap to grid** with selectable subdivisions.
+- **Snap to grid** — drag handles snap to the quarter-note beat grid.
+- **Downbeat = start** — re-anchors the grid so a beat line falls exactly on the
+  current loop-start marker. Auto-detect usually nails the tempo but can be a fraction
+  of a beat off in phase; put the start handle on a beat and tap this to lock the whole
+  grid to it.
 - **Saved loops** — capture a region + grid per track and restore it later.
 
 ## Tech stack
