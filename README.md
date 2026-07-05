@@ -2,10 +2,9 @@
 
 # RubberRing
 
-An Android tool for practicing song parts. Pick an audio file, mark a start/stop
-region on its waveform, and play it back in a seamless, gapless loop. RubberRing
-auto-detects tempo and beats to snap the loop markers to a beat grid, with full
-manual override.
+An Android tool for practicing song parts. Pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop. RubberRing auto-detects (to some extend) tempo and beats to snap the loop markers to a beat grid, with full manual override.
+
+**Alpha software.** Early access chaos — a bold choice.
 
 ## Screenshot
 
@@ -75,3 +74,6 @@ app/src/main/java/de/singular/looper/
     LoopWaveform.kt      waveform + grid + handle rendering
 ```
 
+## Disclaimer
+
+This project was developed with AI assistance. The code has been analysed with Codacy and Bandit. Use at your own discretion.  
