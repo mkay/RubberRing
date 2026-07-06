@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
@@ -60,6 +61,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -114,9 +116,17 @@ class MainActivity : ComponentActivity() {
 fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
+    val keepScreenOn by viewModel.keepScreenOn.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Hold the screen awake while the option is on; always release it when leaving the composition.
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(keepScreenOn) {
+        view.keepScreenOn = keepScreenOn
+        onDispose { view.keepScreenOn = false }
+    }
 
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -175,6 +185,14 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                                 onClick = { viewModel.toggleFollowPlayhead(); menuOpen = false },
                             )
                         }
+                        DropdownMenuItem(
+                            text = { Text("Keep screen on") },
+                            leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+                            trailingIcon = {
+                                if (keepScreenOn) Icon(Icons.Default.Check, contentDescription = null)
+                            },
+                            onClick = { viewModel.toggleKeepScreenOn(); menuOpen = false },
+                        )
                         DropdownMenuItem(
                             text = { Text("Quick help") },
                             leadingIcon = { Icon(Icons.Default.HelpOutline, contentDescription = null) },

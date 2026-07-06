@@ -1,6 +1,8 @@
 package de.singular.looper
 
 import android.app.Application
+import android.content.Context
+import androidx.core.content.edit
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,6 +39,9 @@ sealed interface LooperUiState {
 
 /** Maximum number of named loops a track may hold. */
 const val MAX_SAVED_LOOPS = 4
+
+private const val KEY_FOLLOW_PLAYHEAD = "follow_playhead"
+private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
 
 /** The selected loop region as fractions (0f..1f) of the whole file. */
 data class LoopRegion(val startFrac: Float, val endFrac: Float)
@@ -80,10 +85,24 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private val _savedLoops = MutableStateFlow<List<SavedLoop>>(emptyList())
     val savedLoops: StateFlow<List<SavedLoop>> = _savedLoops.asStateFlow()
 
-    private val _followPlayhead = MutableStateFlow(true)
+    // User preferences that persist across app launches.
+    private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    private val _followPlayhead = MutableStateFlow(prefs.getBoolean(KEY_FOLLOW_PLAYHEAD, true))
     val followPlayhead: StateFlow<Boolean> = _followPlayhead.asStateFlow()
 
-    fun toggleFollowPlayhead() { _followPlayhead.value = !_followPlayhead.value }
+    fun toggleFollowPlayhead() {
+        _followPlayhead.value = !_followPlayhead.value
+        prefs.edit { putBoolean(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value) }
+    }
+
+    private val _keepScreenOn = MutableStateFlow(prefs.getBoolean(KEY_KEEP_SCREEN_ON, false))
+    val keepScreenOn: StateFlow<Boolean> = _keepScreenOn.asStateFlow()
+
+    fun toggleKeepScreenOn() {
+        _keepScreenOn.value = !_keepScreenOn.value
+        prefs.edit { putBoolean(KEY_KEEP_SCREEN_ON, _keepScreenOn.value) }
+    }
 
     private val tapTimes = mutableListOf<Long>()
 
