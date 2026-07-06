@@ -91,6 +91,9 @@ fun LoopWaveform(
     gridOffsetFrac: Float,
     gridIntervalFrac: Float, // 0 = no grid
     gridLinesPerBeat: Int, // subdivision; every Nth line is a beat (drawn brighter)
+    initialZoom: Float,
+    initialOffset: Float,
+    onViewportChange: (zoom: Float, offset: Float) -> Unit,
     onStartChange: (Float) -> Unit,
     onEndChange: (Float) -> Unit,
     onSeek: (Float) -> Unit,
@@ -102,9 +105,15 @@ fun LoopWaveform(
     val seek by rememberUpdatedState(onSeek)
     val haptic = LocalHapticFeedback.current
 
-    // Viewport state, reset when a new file is loaded.
-    var zoom by remember(waveform) { mutableFloatStateOf(1f) }
-    var offset by remember(waveform) { mutableFloatStateOf(0f) }
+    // Viewport state, seeded from the caller and reset when a new file is loaded.
+    var zoom by remember(waveform) { mutableFloatStateOf(initialZoom) }
+    var offset by remember(waveform) { mutableFloatStateOf(initialOffset) }
+
+    // Mirror every viewport change up to the caller so it can be persisted (saved on exit).
+    val reportViewport by rememberUpdatedState(onViewportChange)
+    LaunchedEffect(waveform) {
+        snapshotFlow { zoom to offset }.collect { (z, o) -> reportViewport(z, o) }
+    }
 
     // When following, scroll the view to bring the playhead back whenever it leaves the visible
     // window (e.g. it jumps to the loop start on play). Only matters when zoomed in.

@@ -11,9 +11,11 @@ package de.singular.looper.library
  * @param title        optional user-chosen display title; overrides [displayName] when set.
  * @param importedAt   epoch millis the file was imported.
  * @param durationMs   decoded duration, filled in after the first successful decode.
+ * @param lastOpenedAt epoch millis the track was last opened (0 = never); drives the recents list.
  *
  * [startFrac]..[snap] are the last-used loop state, auto-saved as the user edits and restored
  * when the track is reopened. Defaults describe a fresh track: the whole file, grid off.
+ * [zoom]/[offset] are the last waveform viewport, saved on exit only when the user opts in.
  * [savedLoops] are the user's explicitly named practice loops for this track.
  */
 data class LibraryTrack(
@@ -23,11 +25,14 @@ data class LibraryTrack(
     val title: String? = null,
     val importedAt: Long,
     val durationMs: Long,
+    val lastOpenedAt: Long = 0L,
     val startFrac: Float = 0f,
     val endFrac: Float = 1f,
     val bpm: Float = 120f,
     val downbeatFrac: Float = 0f,
     val snap: Boolean = false,
+    val zoom: Float = 1f,
+    val offset: Float = 0f,
     val savedLoops: List<SavedLoop> = emptyList(),
 ) {
     /** The name to show the user: the chosen [title] if set, otherwise the original file name. */

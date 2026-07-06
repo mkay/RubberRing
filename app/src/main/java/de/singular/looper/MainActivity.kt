@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,40 +33,50 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +95,7 @@ import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.SavedLoop
 import de.singular.looper.ui.LoopWaveform
+import kotlinx.coroutines.launch
 
 // Brand colour used for buttons, chips, and the marker accents.
 private val BrandPrimary = Color(0xFFA62120)
@@ -118,9 +130,13 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
     val keepScreenOn by viewModel.keepScreenOn.collectAsStateWithLifecycle()
-    var menuOpen by remember { mutableStateOf(false) }
+    val saveZoom by viewModel.saveZoom.collectAsStateWithLifecycle()
+    val library by viewModel.libraryTracks.collectAsStateWithLifecycle()
+    val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     // Hold the screen awake while the option is on; always release it when leaving the composition.
     val view = androidx.compose.ui.platform.LocalView.current
@@ -139,7 +155,6 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val openPicker = { picker.launch(arrayOf("audio/*")) }
 
     if (state is LooperUiState.Empty) {
-        val library by viewModel.libraryTracks.collectAsStateWithLifecycle()
         EmptyScreen(
             library,
             onImport = { openPicker() },
@@ -150,87 +165,189 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
         return
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = currentFileName(state) ?: "Rubber Ring",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        if (state is LooperUiState.Loaded) {
-                            DropdownMenuItem(
-                                text = { Text("Library") },
-                                leadingIcon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
-                                onClick = { menuOpen = false; viewModel.closeTrack() },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Import file") },
-                            leadingIcon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
-                            onClick = { menuOpen = false; openPicker() },
-                        )
-                        if (state is LooperUiState.Loaded) {
-                            DropdownMenuItem(
-                                text = { Text("Follow playhead") },
-                                leadingIcon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
-                                trailingIcon = {
-                                    if (following) Icon(Icons.Default.Check, contentDescription = null)
-                                },
-                                onClick = { viewModel.toggleFollowPlayhead(); menuOpen = false },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Keep screen on") },
-                            leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
-                            trailingIcon = {
-                                if (keepScreenOn) Icon(Icons.Default.Check, contentDescription = null)
-                            },
-                            onClick = { viewModel.toggleKeepScreenOn(); menuOpen = false },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Quick help") },
-                            leadingIcon = { Icon(Icons.Default.HelpOutline, contentDescription = null) },
-                            onClick = { menuOpen = false; showHelp = true },
-                        )
-                    }
-                },
+    // Close the drawer, then run an action — used by every navigating drawer entry.
+    val closeThen: (() -> Unit) -> Unit = { action ->
+        scope.launch { drawerState.close() }
+        action()
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            LooperDrawer(
+                following = following,
+                keepScreenOn = keepScreenOn,
+                saveZoom = saveZoom,
+                recents = recents,
+                onLibrary = { closeThen { viewModel.closeTrack() } },
+                onImport = { closeThen { openPicker() } },
+                onToggleFollow = viewModel::toggleFollowPlayhead,
+                onToggleKeepScreenOn = viewModel::toggleKeepScreenOn,
+                onToggleSaveZoom = viewModel::toggleSaveZoom,
+                onOpenRecent = { track -> closeThen { viewModel.open(track) } },
+                onQuickHelp = { closeThen { showHelp = true } },
             )
         },
-    ) { innerPadding ->
-        Box(
-            Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            when (val s = state) {
-                is LooperUiState.Loading -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Spacer(Modifier.height(8.dp))
-                    Text("Decoding…")
-                }
-
-                is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel)
-
-                is LooperUiState.Error -> Text(
-                    "Error: ${s.message}",
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.error,
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = currentFileName(state) ?: "Rubber Ring",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                 )
+            },
+        ) { innerPadding ->
+            Box(
+                Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                when (val s = state) {
+                    is LooperUiState.Loading -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(8.dp))
+                        Text("Decoding…")
+                    }
 
-                is LooperUiState.Empty -> Unit
+                    is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel)
+
+                    is LooperUiState.Error -> Text(
+                        "Error: ${s.message}",
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+
+                    is LooperUiState.Empty -> Unit
+                }
             }
         }
     }
 
     if (showHelp) {
         QuickHelpDialog(onDismiss = { showHelp = false })
+    }
+}
+
+/**
+ * The left navigation drawer for the play view: primary destinations (Library, Import), the
+ * quick option toggles, a recents list, and Quick help pinned to the bottom.
+ */
+@Composable
+private fun LooperDrawer(
+    following: Boolean,
+    keepScreenOn: Boolean,
+    saveZoom: Boolean,
+    recents: List<LibraryTrack>,
+    onLibrary: () -> Unit,
+    onImport: () -> Unit,
+    onToggleFollow: () -> Unit,
+    onToggleKeepScreenOn: () -> Unit,
+    onToggleSaveZoom: () -> Unit,
+    onOpenRecent: (LibraryTrack) -> Unit,
+    onQuickHelp: () -> Unit,
+) {
+    // Take 4/5 of the screen width, leaving a strip of dimmed scrim on the right to tap-to-close.
+    ModalDrawerSheet(Modifier.fillMaxWidth(0.8f)) {
+        Column(Modifier.fillMaxSize()) {
+            Text(
+                "Rubber Ring",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 28.dp, top = 20.dp, bottom = 12.dp),
+            )
+
+            val itemPadding = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+            NavigationDrawerItem(
+                label = { Text("Library") },
+                icon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
+                selected = false,
+                onClick = onLibrary,
+                modifier = itemPadding,
+            )
+            NavigationDrawerItem(
+                label = { Text("Import new file") },
+                icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
+                selected = false,
+                onClick = onImport,
+                modifier = itemPadding,
+            )
+
+            DrawerSectionLabel("Options")
+            // Toggles keep the drawer open — you flip them and see the effect without it closing.
+            DrawerOptionSwitch("Follow playhead", Icons.Default.MyLocation, following, onToggleFollow)
+            DrawerOptionSwitch("Keep screen on", Icons.Default.Lightbulb, keepScreenOn, onToggleKeepScreenOn)
+            DrawerOptionSwitch("Save zoom level", Icons.Default.ZoomIn, saveZoom, onToggleSaveZoom)
+
+            if (recents.isNotEmpty()) {
+                DrawerSectionLabel("Recent")
+                recents.forEach { track ->
+                    NavigationDrawerItem(
+                        label = {
+                            Text(track.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
+                        selected = false,
+                        onClick = { onOpenRecent(track) },
+                        modifier = itemPadding,
+                    )
+                }
+            }
+
+            // Push Quick help to the bottom — the conventional spot for help/about.
+            Spacer(Modifier.weight(1f))
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+            NavigationDrawerItem(
+                label = { Text("Quick help") },
+                icon = { Icon(Icons.Default.HelpOutline, contentDescription = null) },
+                selected = false,
+                onClick = onQuickHelp,
+                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding).padding(bottom = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DrawerSectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 28.dp, top = 16.dp, bottom = 4.dp),
+    )
+}
+
+/**
+ * An option row with a trailing switch. Tapping anywhere on the row toggles it and — unlike a
+ * [NavigationDrawerItem] — leaves the drawer open so the change is visible in place.
+ */
+@Composable
+private fun DrawerOptionSwitch(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    checked: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(NavigationDrawerItemDefaults.ItemPadding)
+            .clip(ControlShape)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = { onToggle() })
     }
 }
 
@@ -323,7 +440,7 @@ private fun EmptyScreen(
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(20.dp))
-        Button(onClick = onImport, shape = ControlShape) { Text("Select audio file") }
+        Button(onClick = onImport, shape = ControlShape) { Text("Import new file") }
         Spacer(Modifier.height(10.dp))
         Text(
             "Supports MP3, AAC (M4A), FLAC, WAV, and OGG.",
@@ -483,6 +600,10 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // The saved viewport (or the reset default) is already in the ViewModel by the time this
+        // composes; read it once to seed the waveform, which owns pan/zoom during the session and
+        // mirrors changes back via onViewportChange.
+        val initialViewport = remember(audio) { viewModel.viewport.value }
         LoopWaveform(
             waveform = audio.waveform,
             startFrac = region.startFrac,
@@ -493,6 +614,9 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             gridOffsetFrac = grid.downbeatFrac,
             gridIntervalFrac = if (grid.enabled) intervalFrac else 0f,
             gridLinesPerBeat = grid.subdivision,
+            initialZoom = initialViewport.zoom,
+            initialOffset = initialViewport.offset,
+            onViewportChange = viewModel::setViewport,
             onStartChange = viewModel::setStart,
             onEndChange = viewModel::setEnd,
             onSeek = viewModel::seek,

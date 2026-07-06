@@ -20,11 +20,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -42,9 +45,16 @@ const val MAX_SAVED_LOOPS = 4
 
 private const val KEY_FOLLOW_PLAYHEAD = "follow_playhead"
 private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+private const val KEY_SAVE_ZOOM = "save_zoom"
+
+/** How many tracks the "Recent" list in the drawer shows. */
+private const val RECENTS_LIMIT = 5
 
 /** The selected loop region as fractions (0f..1f) of the whole file. */
 data class LoopRegion(val startFrac: Float, val endFrac: Float)
+
+/** The waveform viewport: [zoom] (1f = whole file) and [offset] (left edge, as a fraction). */
+data class Viewport(val zoom: Float, val offset: Float)
 
 /**
  * The beat grid. [downbeatFrac] anchors the grid (position of a downbeat as a fraction of
@@ -82,6 +92,15 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private val _library = MutableStateFlow<List<LibraryTrack>>(emptyList())
     val libraryTracks: StateFlow<List<LibraryTrack>> = _library.asStateFlow()
 
+    /** The most recently opened tracks, newest first — powers the drawer's "Recent" list. */
+    val recentTracks: StateFlow<List<LibraryTrack>> = _library
+        .map { tracks ->
+            tracks.filter { it.lastOpenedAt > 0 }
+                .sortedByDescending { it.lastOpenedAt }
+                .take(RECENTS_LIMIT)
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     private val _savedLoops = MutableStateFlow<List<SavedLoop>>(emptyList())
     val savedLoops: StateFlow<List<SavedLoop>> = _savedLoops.asStateFlow()
 
@@ -102,6 +121,22 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleKeepScreenOn() {
         _keepScreenOn.value = !_keepScreenOn.value
         prefs.edit { putBoolean(KEY_KEEP_SCREEN_ON, _keepScreenOn.value) }
+    }
+
+    private val _saveZoom = MutableStateFlow(prefs.getBoolean(KEY_SAVE_ZOOM, false))
+    val saveZoom: StateFlow<Boolean> = _saveZoom.asStateFlow()
+
+    fun toggleSaveZoom() {
+        _saveZoom.value = !_saveZoom.value
+        prefs.edit { putBoolean(KEY_SAVE_ZOOM, _saveZoom.value) }
+    }
+
+    // The live waveform viewport, mirrored up from the waveform so it can be saved on exit.
+    private val _viewport = MutableStateFlow(Viewport(1f, 0f))
+    val viewport: StateFlow<Viewport> = _viewport.asStateFlow()
+
+    fun setViewport(zoom: Float, offset: Float) {
+        _viewport.value = Viewport(zoom, offset)
     }
 
     private val tapTimes = mutableListOf<Long>()
@@ -150,7 +185,10 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                         file.delete() // don't leave an orphan copy that never decoded
                         throw e
                     }
-                    val full = track.copy(durationMs = audio.durationMs)
+                    val full = track.copy(
+                        durationMs = audio.durationMs,
+                        lastOpenedAt = System.currentTimeMillis(),
+                    )
                     library.add(full)
                     added = full
                     audio
@@ -168,17 +206,24 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     /** Open a track already in the library, restoring its saved loop state. */
     fun open(track: LibraryTrack) {
         startLoad(track.name)
+        // Stamp the open time so the track floats to the top of the recents list.
+        val opened = track.copy(lastOpenedAt = System.currentTimeMillis())
         loadJob = viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    AudioDecoder.decode(getApplication(), Uri.fromFile(library.fileFor(track)))
+                    AudioDecoder.decode(getApplication(), Uri.fromFile(library.fileFor(opened)))
                 }
             }
-            finishLoad(result, track.name) { audio ->
-                currentTrack = track
-                _savedLoops.value = track.savedLoops
-                applyLoop(track, audio) // restore markers + grid instead of re-detecting
+            finishLoad(result, opened.name) { audio ->
+                currentTrack = opened
+                _savedLoops.value = opened.savedLoops
+                // Restore the saved viewport only when the user opted in; otherwise start zoomed out.
+                _viewport.value = if (_saveZoom.value) Viewport(opened.zoom, opened.offset)
+                else Viewport(1f, 0f)
+                applyLoop(opened, audio) // restore markers + grid instead of re-detecting
             }
+            withContext(Dispatchers.IO) { library.add(opened) }
+            refreshLibrary()
         }
     }
 
@@ -195,6 +240,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         _region.value = LoopRegion(0f, 1f)
         _playhead.value = 0f
         _grid.value = BeatGridState()
+        _viewport.value = Viewport(1f, 0f)
         tapTimes.clear()
         _state.value = LooperUiState.Loading(displayName)
     }
@@ -460,6 +506,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         val track = currentTrack ?: return
         val r = _region.value
         val g = _grid.value
+        // Save the viewport only when the option is on; otherwise clear it back to the default
+        // so the next open starts zoomed out.
+        val vp = if (_saveZoom.value) _viewport.value else Viewport(1f, 0f)
         runBlocking {
             library.add(
                 track.copy(
@@ -468,6 +517,8 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                     bpm = g.bpm,
                     downbeatFrac = g.downbeatFrac,
                     snap = g.enabled,
+                    zoom = vp.zoom,
+                    offset = vp.offset,
                 ),
             )
         }

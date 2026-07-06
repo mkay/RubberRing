@@ -90,12 +90,15 @@ class LibraryRepository(context: Context) {
                     title = o.optString("title").takeIf { it.isNotBlank() },
                     importedAt = o.getLong("importedAt"),
                     durationMs = o.getLong("durationMs"),
+                    lastOpenedAt = o.optLong("lastOpenedAt", 0L),
                     // Loop state is optional so records written before it existed still load.
                     startFrac = o.optDouble("startFrac", 0.0).toFloat(),
                     endFrac = o.optDouble("endFrac", 1.0).toFloat(),
                     bpm = o.optDouble("bpm", 120.0).toFloat(),
                     downbeatFrac = o.optDouble("downbeatFrac", 0.0).toFloat(),
                     snap = o.optBoolean("snap", false),
+                    zoom = o.optDouble("zoom", 1.0).toFloat(),
+                    offset = o.optDouble("offset", 0.0).toFloat(),
                     savedLoops = readLoops(o.optJSONArray("savedLoops")),
                 )
             }
@@ -129,11 +132,14 @@ class LibraryRepository(context: Context) {
                     .put("title", t.title)
                     .put("importedAt", t.importedAt)
                     .put("durationMs", t.durationMs)
+                    .put("lastOpenedAt", t.lastOpenedAt)
                     .put("startFrac", t.startFrac.toDouble())
                     .put("endFrac", t.endFrac.toDouble())
                     .put("bpm", t.bpm.toDouble())
                     .put("downbeatFrac", t.downbeatFrac.toDouble())
                     .put("snap", t.snap)
+                    .put("zoom", t.zoom.toDouble())
+                    .put("offset", t.offset.toDouble())
                     .put("savedLoops", writeLoops(t.savedLoops)),
             )
         }
