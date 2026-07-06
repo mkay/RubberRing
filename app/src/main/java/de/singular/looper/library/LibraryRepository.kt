@@ -47,9 +47,9 @@ class LibraryRepository(context: Context) {
     /** The on-disk file backing [track]. */
     fun fileFor(track: LibraryTrack): File = File(dir, track.storedFileName)
 
-    /** All imported tracks, newest first. */
+    /** All imported tracks, most recently opened first (falling back to import time if never opened). */
     suspend fun list(): List<LibraryTrack> =
-        mutex.withLock { readIndex() }.sortedByDescending { it.importedAt }
+        mutex.withLock { readIndex() }.sortedByDescending { maxOf(it.lastOpenedAt, it.importedAt) }
 
     /**
      * Copy [uri]'s bytes into the library and return a not-yet-indexed [LibraryTrack] together
