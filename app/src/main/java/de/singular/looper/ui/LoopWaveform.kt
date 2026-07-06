@@ -110,7 +110,7 @@ fun LoopWaveform(
     // window (e.g. it jumps to the loop start on play). Only matters when zoomed in.
     LaunchedEffect(followPlayhead, waveform) {
         if (!followPlayhead) return@LaunchedEffect
-        snapshotFlow { playheadFrac }.collect { ph ->
+        snapshotFlow { playhead }.collect { ph ->
             val window = 1f / zoom
             if (zoom > 1f && (ph < offset || ph > offset + window)) {
                 val maxOffset = (1f - window).coerceAtLeast(0f)
