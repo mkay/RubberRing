@@ -2,6 +2,7 @@ package de.singular.looper
 
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -43,6 +44,8 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
@@ -73,6 +76,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -154,6 +158,59 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     }
     val openPicker = { picker.launch(arrayOf("audio/*")) }
 
+    // Backup: write a zip wherever the user points; restore: read one back (replacing everything).
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri -> if (uri != null) viewModel.exportLibrary(uri) }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) viewModel.importLibrary(uri) }
+    var confirmRestore by remember { mutableStateOf(false) }
+    val backupName = remember {
+        "rubberring-backup-" +
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()) +
+            ".zip"
+    }
+    val startBackup = { exportLauncher.launch(backupName); Unit }
+    val startRestore = { confirmRestore = true }
+
+    // Surface the outcome of the last backup/restore as a toast, then clear it.
+    val backupResult by viewModel.backupResult.collectAsStateWithLifecycle()
+    LaunchedEffect(backupResult) {
+        val message = when (backupResult) {
+            BackupResult.EXPORTED -> "Library backed up"
+            BackupResult.RESTORED -> "Library restored"
+            BackupResult.FAILED -> "Backup failed — check the file and try again"
+            null -> return@LaunchedEffect
+        }
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        viewModel.consumeBackupResult()
+    }
+
+    if (confirmRestore) {
+        AlertDialog(
+            onDismissRequest = { confirmRestore = false },
+            title = { Text("Restore backup?") },
+            text = {
+                Text(
+                    "This replaces your entire current library — all imported tracks and saved " +
+                        "loops — with the contents of the backup. This can't be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestore = false
+                    importLauncher.launch(
+                        arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed"),
+                    )
+                }) { Text("Choose backup") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRestore = false }) { Text("Cancel") }
+            },
+        )
+    }
+
     if (state is LooperUiState.Empty) {
         EmptyScreen(
             library,
@@ -161,6 +218,8 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             onOpen = viewModel::open,
             onRename = viewModel::renameTrack,
             onDelete = viewModel::deleteTrack,
+            onBackup = startBackup,
+            onRestore = startRestore,
         )
         return
     }
@@ -185,6 +244,8 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                 onToggleKeepScreenOn = viewModel::toggleKeepScreenOn,
                 onToggleSaveZoom = viewModel::toggleSaveZoom,
                 onOpenRecent = { track -> closeThen { viewModel.open(track) } },
+                onBackup = { closeThen(startBackup) },
+                onRestore = { closeThen(startRestore) },
                 onQuickHelp = { closeThen { showHelp = true } },
             )
         },
@@ -253,6 +314,8 @@ private fun LooperDrawer(
     onToggleKeepScreenOn: () -> Unit,
     onToggleSaveZoom: () -> Unit,
     onOpenRecent: (LibraryTrack) -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
     onQuickHelp: () -> Unit,
 ) {
     // Take 4/5 of the screen width, leaving a strip of dimmed scrim on the right to tap-to-close.
@@ -299,6 +362,22 @@ private fun LooperDrawer(
                     )
                 }
             }
+
+            DrawerSectionLabel("Backup")
+            NavigationDrawerItem(
+                label = { Text("Back up library") },
+                icon = { Icon(Icons.Default.Save, contentDescription = null) },
+                selected = false,
+                onClick = onBackup,
+                modifier = itemPadding,
+            )
+            NavigationDrawerItem(
+                label = { Text("Restore library") },
+                icon = { Icon(Icons.Default.Restore, contentDescription = null) },
+                selected = false,
+                onClick = onRestore,
+                modifier = itemPadding,
+            )
 
             // Push Quick help to the bottom — the conventional spot for help/about.
             Spacer(Modifier.weight(1f))
@@ -406,6 +485,8 @@ private fun EmptyScreen(
     onOpen: (LibraryTrack) -> Unit,
     onRename: (LibraryTrack, String) -> Unit,
     onDelete: (LibraryTrack) -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
 ) {
     var deleteTarget by remember { mutableStateOf<LibraryTrack?>(null) }
     var renameTarget by remember { mutableStateOf<LibraryTrack?>(null) }
@@ -448,6 +529,20 @@ private fun EmptyScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+
+        // Backup lives here too, so a fresh install can restore before anything is imported.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onBackup, enabled = library.isNotEmpty()) {
+                Icon(Icons.Default.Save, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Back up")
+            }
+            TextButton(onClick = onRestore) {
+                Icon(Icons.Default.Restore, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Restore")
+            }
+        }
 
         if (library.isEmpty()) {
             Spacer(Modifier.weight(1f))

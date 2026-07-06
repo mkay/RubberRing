@@ -14,6 +14,7 @@ import de.singular.looper.audio.WaveformData
 import de.singular.looper.library.LibraryRepository
 import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.SavedLoop
+import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 sealed interface LooperUiState {
     data object Empty : LooperUiState
@@ -55,6 +57,9 @@ data class LoopRegion(val startFrac: Float, val endFrac: Float)
 
 /** The waveform viewport: [zoom] (1f = whole file) and [offset] (left edge, as a fraction). */
 data class Viewport(val zoom: Float, val offset: Float)
+
+/** One-shot outcome of a backup/restore, surfaced to the UI as a message. */
+enum class BackupResult { EXPORTED, RESTORED, FAILED }
 
 /**
  * The beat grid. [downbeatFrac] anchors the grid (position of a downbeat as a fraction of
@@ -137,6 +142,83 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setViewport(zoom: Float, offset: Float) {
         _viewport.value = Viewport(zoom, offset)
+    }
+
+    // ---- Backup / restore ----
+
+    // One-shot result of the last backup/restore; the UI shows it, then calls [consumeBackupResult].
+    private val _backupResult = MutableStateFlow<BackupResult?>(null)
+    val backupResult: StateFlow<BackupResult?> = _backupResult.asStateFlow()
+
+    fun consumeBackupResult() { _backupResult.value = null }
+
+    /** Write a full backup (library + settings) to the user-chosen [uri]. */
+    fun exportLibrary(uri: Uri) {
+        viewModelScope.launch {
+            val ok = runCatching {
+                withContext(Dispatchers.IO) {
+                    // Fold the open track's latest edits into the index so the backup is current.
+                    flushLoopState()
+                    val resolver = getApplication<Application>().contentResolver
+                    resolver.openOutputStream(uri)?.use { library.exportTo(it, settingsJson()) }
+                        ?: throw IOException("Could not open the destination file")
+                }
+            }.isSuccess
+            _backupResult.value = if (ok) BackupResult.EXPORTED else BackupResult.FAILED
+        }
+    }
+
+    /** Replace the whole library from the backup at [uri], then return to the library list. */
+    fun importLibrary(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val resolver = getApplication<Application>().contentResolver
+                    resolver.openInputStream(uri)?.use { library.importFrom(it) }
+                        ?: throw IOException("Could not open the backup file")
+                }
+            }.onSuccess { settings ->
+                applySettingsJson(settings)
+                // Drop any open track without writing it back (its file may no longer exist),
+                // then reload the restored library.
+                discardOpenTrack()
+                refreshLibrary()
+                _backupResult.value = BackupResult.RESTORED
+            }.onFailure {
+                _backupResult.value = BackupResult.FAILED
+            }
+        }
+    }
+
+    private fun settingsJson(): String = JSONObject()
+        .put(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
+        .put(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
+        .put(KEY_SAVE_ZOOM, _saveZoom.value)
+        .toString()
+
+    private fun applySettingsJson(json: String?) {
+        val o = runCatching { JSONObject(json ?: return) }.getOrNull() ?: return
+        if (o.has(KEY_FOLLOW_PLAYHEAD)) _followPlayhead.value = o.getBoolean(KEY_FOLLOW_PLAYHEAD)
+        if (o.has(KEY_KEEP_SCREEN_ON)) _keepScreenOn.value = o.getBoolean(KEY_KEEP_SCREEN_ON)
+        if (o.has(KEY_SAVE_ZOOM)) _saveZoom.value = o.getBoolean(KEY_SAVE_ZOOM)
+        prefs.edit {
+            putBoolean(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
+            putBoolean(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
+            putBoolean(KEY_SAVE_ZOOM, _saveZoom.value)
+        }
+    }
+
+    /** Tear down the open track without persisting it (used after a restore replaces the library). */
+    private fun discardOpenTrack() {
+        loadJob?.cancel()
+        detectJob?.cancel()
+        stopPlayback()
+        player?.release()
+        player = null
+        currentTrack = null
+        _savedLoops.value = emptyList()
+        _playhead.value = 0f
+        _state.value = LooperUiState.Empty
     }
 
     private val tapTimes = mutableListOf<Long>()
