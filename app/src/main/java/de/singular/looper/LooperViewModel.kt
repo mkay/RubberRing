@@ -132,6 +132,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
      * Import a freshly picked file: copy its bytes into the library, decode, open it, and
      * (only on a successful decode) record it in the library index.
      */
+    // Catch-all: any failure (or coroutine cancellation) during decode must delete the orphan
+    // copy before propagating, so we intentionally catch Throwable and rethrow unchanged.
+    @Suppress("TooGenericExceptionCaught")
     fun importAndOpen(uri: Uri, displayName: String?) {
         startLoad(displayName)
         loadJob = viewModelScope.launch {

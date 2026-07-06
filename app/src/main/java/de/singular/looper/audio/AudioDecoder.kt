@@ -27,6 +27,10 @@ object AudioDecoder {
      * Assumes 16-bit PCM output (the platform default). Runs synchronously — call off the main thread.
      */
     // Higher bucket count keeps the waveform detailed when zoomed in.
+    // Catch-all: the platform MediaExtractor/MediaCodec stack throws a wide, undocumented range
+    // of unchecked exceptions on malformed or unsupported media; we normalise them all into a
+    // single DecodeException for callers.
+    @Suppress("TooGenericExceptionCaught")
     fun decode(context: Context, uri: Uri, bucketCount: Int = 6000): DecodedAudio {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
