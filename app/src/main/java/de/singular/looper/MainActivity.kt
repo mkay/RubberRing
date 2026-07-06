@@ -393,8 +393,13 @@ private fun LibraryRow(track: LibraryTrack, onClick: () -> Unit, onDelete: () ->
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                if (track.durationMs > 0) {
-                    Text(formatMs(track.durationMs), style = MaterialTheme.typography.labelSmall)
+                val subtitle = buildList {
+                    if (track.durationMs > 0) add(formatMs(track.durationMs))
+                    val loops = track.savedLoops.size
+                    if (loops > 0) add(if (loops == 1) "1 Loop" else "$loops Loops")
+                }.joinToString(" | ")
+                if (subtitle.isNotEmpty()) {
+                    Text(subtitle, style = MaterialTheme.typography.labelSmall)
                 }
             }
             Box {
