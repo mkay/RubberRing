@@ -179,10 +179,13 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }.onSuccess { settings ->
                 applySettingsJson(settings)
-                // Drop any open track without writing it back (its file may no longer exist),
-                // then reload the restored library.
+                // Drop any open track without writing it back (its file may no longer exist).
                 discardOpenTrack()
-                refreshLibrary()
+                // Refresh synchronously — NOT the fire-and-forget refreshLibrary() — so the list is
+                // repopulated before we report success. Otherwise the restored tracks don't
+                // reappear until the next app launch (the detached refresh races the lifecycle
+                // resume from the file picker and its emission is missed).
+                _library.value = withContext(Dispatchers.IO) { library.list() }
                 _backupResult.value = BackupResult.RESTORED
             }.onFailure {
                 _backupResult.value = BackupResult.FAILED

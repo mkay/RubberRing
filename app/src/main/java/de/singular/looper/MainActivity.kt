@@ -244,8 +244,6 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                 onToggleKeepScreenOn = viewModel::toggleKeepScreenOn,
                 onToggleSaveZoom = viewModel::toggleSaveZoom,
                 onOpenRecent = { track -> closeThen { viewModel.open(track) } },
-                onBackup = { closeThen(startBackup) },
-                onRestore = { closeThen(startRestore) },
                 onQuickHelp = { closeThen { showHelp = true } },
             )
         },
@@ -314,8 +312,6 @@ private fun LooperDrawer(
     onToggleKeepScreenOn: () -> Unit,
     onToggleSaveZoom: () -> Unit,
     onOpenRecent: (LibraryTrack) -> Unit,
-    onBackup: () -> Unit,
-    onRestore: () -> Unit,
     onQuickHelp: () -> Unit,
 ) {
     // Take 4/5 of the screen width, leaving a strip of dimmed scrim on the right to tap-to-close.
@@ -362,22 +358,6 @@ private fun LooperDrawer(
                     )
                 }
             }
-
-            DrawerSectionLabel("Backup")
-            NavigationDrawerItem(
-                label = { Text("Back up library") },
-                icon = { Icon(Icons.Default.Save, contentDescription = null) },
-                selected = false,
-                onClick = onBackup,
-                modifier = itemPadding,
-            )
-            NavigationDrawerItem(
-                label = { Text("Restore library") },
-                icon = { Icon(Icons.Default.Restore, contentDescription = null) },
-                selected = false,
-                onClick = onRestore,
-                modifier = itemPadding,
-            )
 
             // Push Quick help to the bottom — the conventional spot for help/about.
             Spacer(Modifier.weight(1f))
@@ -490,6 +470,7 @@ private fun EmptyScreen(
 ) {
     var deleteTarget by remember { mutableStateOf<LibraryTrack?>(null) }
     var renameTarget by remember { mutableStateOf<LibraryTrack?>(null) }
+    var showBackupChoices by remember { mutableStateOf(false) }
 
     Column(
         // This screen renders outside the Scaffold, so apply system-bar insets ourselves
@@ -530,20 +511,6 @@ private fun EmptyScreen(
             textAlign = TextAlign.Center,
         )
 
-        // Backup lives here too, so a fresh install can restore before anything is imported.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onBackup, enabled = library.isNotEmpty()) {
-                Icon(Icons.Default.Save, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Back up")
-            }
-            TextButton(onClick = onRestore) {
-                Icon(Icons.Default.Restore, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Restore")
-            }
-        }
-
         if (library.isEmpty()) {
             Spacer(Modifier.weight(1f))
         } else {
@@ -568,6 +535,40 @@ private fun EmptyScreen(
                 }
             }
         }
+
+        // A single quiet entry below the list opens a chooser for backing up or restoring.
+        // It lives here so a fresh install can restore before anything is imported.
+        Spacer(Modifier.height(6.dp))
+        BackupTextAction("Backup / Restore Library") { showBackupChoices = true }
+    }
+
+    if (showBackupChoices) {
+        AlertDialog(
+            onDismissRequest = { showBackupChoices = false },
+            title = { Text("Backup / Restore Library") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Nothing to back up on a fresh, empty library — offer only Restore then.
+                    if (library.isNotEmpty()) {
+                        BackupChoiceRow(
+                            icon = Icons.Default.Save,
+                            title = "Back up library",
+                            subtitle = "Save all tracks and loops to a file",
+                            onClick = { showBackupChoices = false; onBackup() },
+                        )
+                    }
+                    BackupChoiceRow(
+                        icon = Icons.Default.Restore,
+                        title = "Restore library",
+                        subtitle = "Replace everything from a backup file",
+                        onClick = { showBackupChoices = false; onRestore() },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBackupChoices = false }) { Text("Cancel") }
+            },
+        )
     }
 
     deleteTarget?.let { target ->
@@ -596,6 +597,49 @@ private fun EmptyScreen(
             onConfirm = { onRename(target, it); renameTarget = null },
             onDismiss = { renameTarget = null },
         )
+    }
+}
+
+/** A small, muted text action (used for the backup/restore entry under the library list). */
+@Composable
+private fun BackupTextAction(label: String, onClick: () -> Unit) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(ControlShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    )
+}
+
+/** One selectable option (icon + title + subtitle) in the backup/restore chooser dialog. */
+@Composable
+private fun BackupChoiceRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(ControlShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
