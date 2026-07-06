@@ -10,7 +10,6 @@ Early-stage release — everything should work as advertised; beat detection nee
 ## Screenshots
 
 <img src="docs/screenshot.png" alt="RubberRing loop editor" width="320" />
-<img src="docs/menu.png" alt="RubberRing menu" width="320" />
 
 ## Features
 
