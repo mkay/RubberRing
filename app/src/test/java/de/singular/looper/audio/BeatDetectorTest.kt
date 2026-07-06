@@ -52,6 +52,42 @@ class BeatDetectorTest {
         return DecodedAudio(pcm, 1, sampleRate, wave)
     }
 
+    /**
+     * A melodic track: a new pitched note begins on every beat with a soft attack and a long
+     * decay that overlaps the next. Total loudness stays roughly flat (notes overlap), so a
+     * broadband energy difference would barely see the onsets — only spectral flux, which notices
+     * the *new frequency*, catches the beat.
+     */
+    private fun melodicTrack(bpm: Double, seconds: Double = 12.0): DecodedAudio {
+        val totalFrames = (seconds * sampleRate).toInt()
+        val pcm = ShortArray(totalFrames)
+        val periodFrames = 60.0 / bpm * sampleRate
+        val attackFrames = 0.04 * sampleRate   // ~40 ms soft attack (weak energy transient)
+        val decayFrames = 0.9 * periodFrames    // long tail, overlaps the next note
+        val noteLen = (periodFrames * 1.6).toInt()
+        val scale = doubleArrayOf(261.63, 293.66, 329.63, 349.23, 392.0, 440.0, 493.88) // C major
+
+        var beat = 0
+        var t = 0.0
+        while (t < totalFrames) {
+            val start = t.toInt()
+            val freq = scale[beat % scale.size]
+            for (j in 0 until noteLen) {
+                val idx = start + j
+                if (idx >= totalFrames) break
+                val attack = min(1.0, j / attackFrames)
+                val decay = exp(-j / decayFrames)
+                val s = sin(2 * PI * freq * j / sampleRate) * attack * decay * 6_000
+                pcm[idx] = (pcm[idx] + s.toInt()).toShort().coerceAudio()
+            }
+            beat++
+            t += periodFrames
+        }
+
+        val wave = WaveformData(FloatArray(1), FloatArray(1), 0L, sampleRate, 1)
+        return DecodedAudio(pcm, 1, sampleRate, wave)
+    }
+
     private fun Short.coerceAudio(): Short = toInt().coerceIn(-32_768, 32_767).toShort()
 
     private fun assertTempo(bpm: Double, tolerance: Float = 2.5f, sustainedTone: Boolean = false) {
@@ -69,6 +105,14 @@ class BeatDetectorTest {
 
     /** A loud sustained passage must not throw off the tempo — the novelty whitening's job. */
     @Test fun detects110WithSustainedLoudSection() = assertTempo(110.0, sustainedTone = true)
+
+    /** Melodic material with overlapping soft-attack notes — the case spectral flux exists for. */
+    @Test fun detectsMelodic112() {
+        val est = BeatDetector.detect(melodicTrack(112.0))
+        assertNotNull("detector returned null for melodic 112 BPM", est)
+        val error = kotlin.math.abs(est!!.bpm - 112f)
+        assertTrue("detected ${est.bpm} for melodic 112 BPM (error $error)", error <= 3f)
+    }
 
     /** The downbeat should land on a click, not somewhere between beats. */
     @Test fun phaseLandsOnABeat() {

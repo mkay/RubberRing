@@ -1,12 +1,14 @@
 package de.singular.looper.audio
 
+import kotlin.math.PI
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /** Result of tempo analysis: a tempo plus the position of a beat to anchor the grid to. */
 data class BeatEstimate(val bpm: Float, val downbeatFrac: Float)
@@ -14,8 +16,8 @@ data class BeatEstimate(val bpm: Float, val downbeatFrac: Float)
 /**
  * A small, dependency-free tempo estimator.
  *
- * Pipeline: reduce the audio to an **onset-strength envelope** (rectified flux of log energy —
- * where the sound suddenly gets louder), **autocorrelate** it, then score each candidate tempo
+ * Pipeline: reduce the audio to an **onset-strength envelope** (spectral flux — where new
+ * frequency content appears), **autocorrelate** it, then score each candidate tempo
  * with a **comb filter** that sums the correlation at that tempo's period *and its harmonics*
  * (2×, 3×, 4×). The comb is the key to avoiding octave/metrical errors (e.g. reporting 144 for a
  * 108 BPM song): a wrong multiple lines up with only some of the true beats, while the real tempo
@@ -30,9 +32,16 @@ object BeatDetector {
     private const val MIN_BPM = 70f
     private const val MAX_BPM = 180f
 
-    // Envelope resolution: one energy sample per this many audio frames. At 44.1 kHz a hop of
+    // Envelope resolution: one flux sample per this many audio frames. At 44.1 kHz a hop of
     // 512 gives ~86 envelope samples/sec — fine enough for beat spacing, cheap to analyse.
     private const val HOP = 512
+
+    // STFT window length for spectral flux. 2048 @ 44.1 kHz ≈ 46 ms — the usual onset-detection
+    // resolution; with the 512 hop that's 75% overlap. Must be a power of two for the radix-2 FFT.
+    private const val FFT_SIZE = 2048
+
+    // Sub-hop resolution for the phase (downbeat) search, in envelope samples.
+    private const val PHASE_STEP_HOPS = 0.25f
 
     // Adaptive-novelty window radius, in hops. Each onset is measured against the local mean over
     // roughly this much time either side (~0.19 s at 44.1 kHz), so a sustained-loud passage (a
@@ -106,35 +115,52 @@ object BeatDetector {
             bpm += 0.25f
         }
 
-        val bestLag = (fps * 60f / bestBpm).roundToInt().coerceIn(minLag, maxLag)
+        // Beat period in envelope samples — kept *fractional*. Stepping the phase search by a
+        // rounded integer period would drift ~0.3 hop/beat off the true grid and smear the result.
+        val periodHops = fps * 60f / bestBpm
 
-        // Phase: slide a one-period window and keep the offset with the most onset energy.
-        var bestOffset = 0
+        // Linear interpolation into the envelope for fractional positions.
+        fun envAt(x: Float): Float {
+            if (x <= 0f) return env[0]
+            if (x >= (env.size - 1).toFloat()) return env[env.size - 1]
+            val lo = x.toInt()
+            val frac = x - lo
+            return env[lo] * (1f - frac) + env[lo + 1] * frac
+        }
+
+        // Phase: slide a one-period window at sub-hop resolution and keep the sub-hop offset whose
+        // pulse train collects the most onset energy across the whole file.
+        var bestOffset = 0f
         var bestPhaseScore = Float.NEGATIVE_INFINITY
-        for (offset in 0 until bestLag) {
+        var offset = 0f
+        while (offset < periodHops) {
             var acc = 0f
-            var i = offset
-            while (i < env.size) {
-                acc += env[i]
-                i += bestLag
+            var pos = offset
+            while (pos < env.size) {
+                acc += envAt(pos)
+                pos += periodHops
             }
             if (acc > bestPhaseScore) {
                 bestPhaseScore = acc
                 bestOffset = offset
             }
+            offset += PHASE_STEP_HOPS
         }
 
-        val downbeatFrame = bestOffset.toLong() * HOP
+        val downbeatFrame = (bestOffset * HOP).toLong()
         val downbeatFrac = (downbeatFrame.toFloat() / audio.frameCount).coerceIn(0f, 1f)
         return BeatEstimate(bestBpm, downbeatFrac)
     }
 
     /**
-     * An onset-strength envelope: the rectified flux of log short-time energy (where the sound
-     * suddenly gets louder), then **adaptively whitened** by subtracting a local moving average so
-     * only local peaks survive. Log compression keeps a few loud transients from dominating; the
-     * local-mean subtraction keeps a sustained-loud section from doing the same. Channels are mixed
-     * to mono. Returns null if there isn't enough signal to work with.
+     * An onset-strength envelope built from **spectral flux**: per STFT frame, the sum over
+     * frequency bins of the *rise* in (compressed) magnitude since the previous frame. Rectifying
+     * per bin *before* summing is the key — new energy in any band counts even while other bands
+     * decay, so a note entering over a fading one still registers (a broadband energy difference
+     * would cancel it). Each bin is compared against the max of its neighbours a frame back, which
+     * keeps vibrato/tremolo from firing false onsets. The result is then **adaptively whitened** by
+     * subtracting a local moving average so only local peaks survive (a sustained-loud passage
+     * reads as flat). Channels are mixed to mono. Returns null if there isn't enough signal.
      */
     private fun onsetEnvelope(audio: DecodedAudio): FloatArray? {
         val pcm = audio.pcm
@@ -143,23 +169,50 @@ object BeatDetector {
         val hops = frames / HOP
         if (hops < 8) return null
 
-        // Pass 1: rectified log-energy flux per hop.
+        // Pass 1: spectral flux per hop, from a Hann-windowed FFT centred on each hop.
+        val window = FloatArray(FFT_SIZE) { 0.5f - 0.5f * cos(2.0 * PI * it / (FFT_SIZE - 1)).toFloat() }
+        val re = FloatArray(FFT_SIZE)
+        val im = FloatArray(FFT_SIZE)
+        val bins = FFT_SIZE / 2 + 1
+        val half = FFT_SIZE / 2
+        var prevMag = FloatArray(bins)
+        var curMag = FloatArray(bins)
         val flux = FloatArray(hops)
-        var prevLogE = 0f
+
         for (h in 0 until hops) {
-            var energy = 0f
-            val frameStart = h * HOP
-            for (f in 0 until HOP) {
-                val base = (frameStart + f) * channels
-                var sum = 0
-                for (c in 0 until channels) sum += pcm[base + c].toInt()
-                val mono = sum.toFloat() / channels
-                energy += mono * mono
+            // Window the mono signal centred on this hop; zero-pad past the file edges.
+            val center = h * HOP
+            for (n in 0 until FFT_SIZE) {
+                val idx = center - half + n
+                var mono = 0f
+                if (idx in 0 until frames) {
+                    val base = idx * channels
+                    var sum = 0
+                    for (c in 0 until channels) sum += pcm[base + c].toInt()
+                    mono = sum.toFloat() / channels
+                }
+                re[n] = mono * window[n]
+                im[n] = 0f
             }
-            energy /= HOP
-            val logE = ln(1f + energy)
-            flux[h] = max(0f, logE - prevLogE)
-            prevLogE = logE
+            Fft.transform(re, im)
+            for (k in 0 until bins) curMag[k] = ln(1f + sqrt(re[k] * re[k] + im[k] * im[k]))
+
+            if (h == 0) {
+                flux[0] = 0f // no previous frame to diff against
+            } else {
+                var f = 0f
+                for (k in 0 until bins) {
+                    // Reference = loudest of the neighbouring bins one frame back (vibrato guard).
+                    val lo = max(0, k - 1)
+                    val hi = min(bins - 1, k + 1)
+                    var ref = prevMag[lo]
+                    for (kk in lo + 1..hi) if (prevMag[kk] > ref) ref = prevMag[kk]
+                    val d = curMag[k] - ref
+                    if (d > 0f) f += d
+                }
+                flux[h] = f
+            }
+            val swap = prevMag; prevMag = curMag; curMag = swap
         }
 
         // Pass 2: subtract a centred local mean (prefix sums make the window O(1)) and rectify, so
