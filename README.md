@@ -1,6 +1,7 @@
-<img src="docs/icon.png" alt="RubberRing icon" width="96" align="left" />
-
-# RubberRing
+<h1>
+  <img src="docs/icon.png" alt="RubberRing icon" height="52" align="middle" />
+  RubberRing
+</h1>
 
 An Android tool for practicing song parts. Pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop. RubberRing auto-detects (to some extend) tempo and beats to snap the loop markers to a beat grid, with full manual override.
 
