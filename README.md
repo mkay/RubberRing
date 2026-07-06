@@ -76,4 +76,6 @@ app/src/main/java/de/singular/looper/
 
 ## Disclaimer
 
-This project was developed with AI assistance. The code has been analysed with Codacy and Bandit. Use at your own discretion.  
+This project was developed with AI assistance. The code has been analysed with Codacy (detekt). Use at your own discretion.  
+
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/ddcda70adc4c442dbb9f03d9aa2f0e31)](https://app.codacy.com/gh/mkay/RubberRing/dashboard)
