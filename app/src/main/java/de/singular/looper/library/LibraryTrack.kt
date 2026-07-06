@@ -7,7 +7,8 @@ package de.singular.looper.library
  *
  * @param id           stable unique id; also the base of the on-disk file name.
  * @param storedFileName file name within the library directory (e.g. "<id>.mp3").
- * @param displayName  the original, user-facing file name.
+ * @param displayName  the original file name; kept untouched as a fallback.
+ * @param title        optional user-chosen display title; overrides [displayName] when set.
  * @param importedAt   epoch millis the file was imported.
  * @param durationMs   decoded duration, filled in after the first successful decode.
  *
@@ -19,6 +20,7 @@ data class LibraryTrack(
     val id: String,
     val storedFileName: String,
     val displayName: String,
+    val title: String? = null,
     val importedAt: Long,
     val durationMs: Long,
     val startFrac: Float = 0f,
@@ -27,4 +29,7 @@ data class LibraryTrack(
     val downbeatFrac: Float = 0f,
     val snap: Boolean = false,
     val savedLoops: List<SavedLoop> = emptyList(),
-)
+) {
+    /** The name to show the user: the chosen [title] if set, otherwise the original file name. */
+    val name: String get() = title?.takeIf { it.isNotBlank() } ?: displayName
+}

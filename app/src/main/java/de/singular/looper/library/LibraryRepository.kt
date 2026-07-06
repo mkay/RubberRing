@@ -87,6 +87,7 @@ class LibraryRepository(context: Context) {
                     id = o.getString("id"),
                     storedFileName = o.getString("storedFileName"),
                     displayName = o.getString("displayName"),
+                    title = o.optString("title").takeIf { it.isNotBlank() },
                     importedAt = o.getLong("importedAt"),
                     durationMs = o.getLong("durationMs"),
                     // Loop state is optional so records written before it existed still load.
@@ -125,6 +126,7 @@ class LibraryRepository(context: Context) {
                     .put("id", t.id)
                     .put("storedFileName", t.storedFileName)
                     .put("displayName", t.displayName)
+                    .put("title", t.title)
                     .put("importedAt", t.importedAt)
                     .put("durationMs", t.durationMs)
                     .put("startFrac", t.startFrac.toDouble())

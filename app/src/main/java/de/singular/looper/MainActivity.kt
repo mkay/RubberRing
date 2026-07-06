@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -143,6 +144,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             library,
             onImport = { openPicker() },
             onOpen = viewModel::open,
+            onRename = viewModel::renameTrack,
             onDelete = viewModel::deleteTrack,
         )
         return
@@ -285,9 +287,11 @@ private fun EmptyScreen(
     library: List<LibraryTrack>,
     onImport: () -> Unit,
     onOpen: (LibraryTrack) -> Unit,
+    onRename: (LibraryTrack, String) -> Unit,
     onDelete: (LibraryTrack) -> Unit,
 ) {
     var deleteTarget by remember { mutableStateOf<LibraryTrack?>(null) }
+    var renameTarget by remember { mutableStateOf<LibraryTrack?>(null) }
 
     Column(
         // This screen renders outside the Scaffold, so apply system-bar insets ourselves
@@ -346,6 +350,7 @@ private fun EmptyScreen(
                     LibraryRow(
                         track = track,
                         onClick = { onOpen(track) },
+                        onRename = { renameTarget = track },
                         onDelete = { deleteTarget = track },
                     )
                 }
@@ -359,7 +364,7 @@ private fun EmptyScreen(
             title = { Text("Delete track?") },
             text = {
                 Text(
-                    "Remove \"${target.displayName}\" and its saved loops from your library? " +
+                    "Remove \"${target.name}\" and its saved loops from your library? " +
                         "The original file on your device is not affected.",
                 )
             },
@@ -371,10 +376,24 @@ private fun EmptyScreen(
             },
         )
     }
+
+    renameTarget?.let { target ->
+        LoopNameDialog(
+            title = "Rename track",
+            initial = target.name,
+            onConfirm = { onRename(target, it); renameTarget = null },
+            onDismiss = { renameTarget = null },
+        )
+    }
 }
 
 @Composable
-private fun LibraryRow(track: LibraryTrack, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun LibraryRow(
+    track: LibraryTrack,
+    onClick: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
     var menu by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
@@ -388,18 +407,39 @@ private fun LibraryRow(track: LibraryTrack, onClick: () -> Unit, onDelete: () ->
         ) {
             Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
                 Text(
-                    track.displayName,
+                    track.name,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                val subtitle = buildList {
+                val info = buildList {
                     if (track.durationMs > 0) add(formatMs(track.durationMs))
                     val loops = track.savedLoops.size
                     if (loops > 0) add(if (loops == 1) "1 Loop" else "$loops Loops")
                 }.joinToString(" | ")
-                if (subtitle.isNotEmpty()) {
-                    Text(subtitle, style = MaterialTheme.typography.labelSmall)
+                // Show the metadata on the left; when a custom title is set, put the original
+                // file name on the right (otherwise it would just repeat the label above).
+                if (info.isNotEmpty() || track.title != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            info,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (track.title != null) {
+                            Text(
+                                track.displayName,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.End,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                // Cap at half the row so a long file name truncates instead of
+                                // crowding out the metadata on the left.
+                                modifier = Modifier.weight(1f).padding(start = 8.dp),
+                            )
+                        }
+                    }
                 }
             }
             Box {
@@ -407,6 +447,11 @@ private fun LibraryRow(track: LibraryTrack, onClick: () -> Unit, onDelete: () ->
                     Icon(Icons.Default.MoreVert, contentDescription = "Track options")
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        onClick = { menu = false; onRename() },
+                    )
                     DropdownMenuItem(
                         text = { Text("Delete") },
                         leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },

@@ -167,14 +167,14 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Open a track already in the library, restoring its saved loop state. */
     fun open(track: LibraryTrack) {
-        startLoad(track.displayName)
+        startLoad(track.name)
         loadJob = viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     AudioDecoder.decode(getApplication(), Uri.fromFile(library.fileFor(track)))
                 }
             }
-            finishLoad(result, track.displayName) { audio ->
+            finishLoad(result, track.name) { audio ->
                 currentTrack = track
                 _savedLoops.value = track.savedLoops
                 applyLoop(track, audio) // restore markers + grid instead of re-detecting
@@ -493,6 +493,15 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (currentTrack?.id == track.id) currentTrack = null
         viewModelScope.launch {
             withContext(Dispatchers.IO) { library.remove(track) }
+            refreshLibrary()
+        }
+    }
+
+    /** Set (or clear, when blank) a track's custom display title, leaving its file untouched. */
+    fun renameTrack(track: LibraryTrack, title: String) {
+        val clean = title.trim().takeIf { it.isNotBlank() }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { library.add(track.copy(title = clean)) }
             refreshLibrary()
         }
     }
