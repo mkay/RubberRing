@@ -1,0 +1,23 @@
+Rubber Ring is a tool for practicing song parts. Pick an audio file, mark a
+start/stop region on its waveform, and play it back in a seamless, gapless loop.
+It auto-detects (to some extent) tempo and beats to snap the loop markers to a
+beat grid, with full manual override.
+
+Alpha software: early access, expect rough edges.
+
+Features:
+
+* Import-and-own library — picked files are copied into app-private storage, so
+  loops never break when the original is moved, renamed, or deleted.
+* Waveform region selection — drag start/stop handles to mark the section to loop.
+* Gapless looping — the region is decoded to PCM and looped via AudioTrack loop
+  points, so the boundary wraps with zero audible gap or click.
+* Automatic beat grid — a dependency-free tempo estimator finds BPM and a
+  downbeat; the grid is always hand-editable.
+* Snap to grid — drag handles snap to the quarter-note beat grid.
+* Saved loops — capture a region and grid per track and restore it later.
+* Custom track titles — rename any library entry to a friendlier name.
+* Follow playhead — auto-scrolls the zoomed waveform to keep the playhead in view.
+* Keep screen on — optional toggle to stop the display sleeping while practicing.
+
+No ads, no trackers, no network access.

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Bare activity theme; all real UI styling lives in the Compose theme. -->
-    <style name="Theme.AndroidLooper" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.RubberRing" parent="android:Theme.Material.NoActionBar" />
 </resources>

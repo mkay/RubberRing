@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AndroidLooper"
+rootProject.name = "RubberRing"
 include(":app")
