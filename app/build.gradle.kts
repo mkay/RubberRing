@@ -55,4 +55,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Local JVM unit tests (BeatDetector is pure Kotlin — no Android framework needed).
+    testImplementation("junit:junit:4.13.2")
 }

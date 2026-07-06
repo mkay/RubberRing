@@ -522,8 +522,15 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         resnapRegion()
     }
 
-    fun setDownbeatToStart() {
-        _grid.value = _grid.value.copy(downbeatFrac = _region.value.startFrac, enabled = true)
+    /** Halve or double the tempo — the one-tap fix for an octave error in auto-detect. */
+    fun halveTempo() = scaleTempo(0.5f)
+    fun doubleTempo() = scaleTempo(2f)
+
+    private fun scaleTempo(factor: Float) {
+        _grid.value = _grid.value.copy(
+            bpm = (_grid.value.bpm * factor).coerceIn(20f, 400f),
+            enabled = true,
+        )
         resnapRegion()
     }
 

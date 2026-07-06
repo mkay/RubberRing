@@ -966,12 +966,18 @@ private fun BeatControls(grid: BeatGridState, detecting: Boolean, viewModel: Loo
                 shape = ControlShape,
             )
 
-            // Anchor the grid to the current loop start — the manual phase fix when auto lands
-            // the beats a fraction off.
+            // Octave fix: auto-detect most often errs by a factor of two, which ±1 nudges can't
+            // reach — one tap halves or doubles the tempo instead.
             FilterChip(
                 selected = false,
-                onClick = { viewModel.setDownbeatToStart() },
-                label = { Text("Downbeat = start") },
+                onClick = { viewModel.halveTempo() },
+                label = { Text("½×") },
+                shape = ControlShape,
+            )
+            FilterChip(
+                selected = false,
+                onClick = { viewModel.doubleTempo() },
+                label = { Text("2×") },
                 shape = ControlShape,
             )
         }

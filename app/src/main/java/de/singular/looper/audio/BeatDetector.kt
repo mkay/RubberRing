@@ -34,6 +34,12 @@ object BeatDetector {
     // 512 gives ~86 envelope samples/sec — fine enough for beat spacing, cheap to analyse.
     private const val HOP = 512
 
+    // Adaptive-novelty window radius, in hops. Each onset is measured against the local mean over
+    // roughly this much time either side (~0.19 s at 44.1 kHz), so a sustained-loud passage (a
+    // chorus) reads as flat rather than as one giant onset — which used to drag the tempo and the
+    // downbeat toward wherever the song was loudest.
+    private const val LOCAL_MEAN_HOPS = 16
+
     // How many harmonics of each candidate period the comb filter sums over.
     private const val COMB_HARMONICS = 4
 
@@ -55,15 +61,19 @@ object BeatDetector {
         val maxCombLag = min(env.size - 1, maxLag * COMB_HARMONICS)
         if (maxLag <= minLag || maxCombLag <= minLag) return null
 
-        // Autocorrelation for every lag the comb might reach, normalised by overlap length so
-        // the count of summed terms doesn't bias the result toward one end of the range.
+        // Autocorrelate the *zero-mean* envelope so the score reflects periodicity (covariance),
+        // not the envelope's positive DC offset — which otherwise adds a near-constant floor at
+        // every lag and washes out the peaks. Normalised by overlap length so the count of summed
+        // terms doesn't bias the result toward one end of the range.
+        val mean = (env.sum() / env.size)
+        val cen = FloatArray(env.size) { env[it] - mean }
         val ac = FloatArray(maxCombLag + 1)
         for (lag in 1..maxCombLag) {
             var acc = 0f
             var i = 0
-            val end = env.size - lag
+            val end = cen.size - lag
             while (i < end) {
-                acc += env[i] * env[i + lag]
+                acc += cen[i] * cen[i + lag]
                 i++
             }
             ac[lag] = acc / end
@@ -120,9 +130,11 @@ object BeatDetector {
     }
 
     /**
-     * Rectified flux of log short-time energy: per hop, the increase over the previous hop.
-     * Log compression keeps a few loud transients from dominating the periodicity estimate.
-     * Channels are mixed to mono. Returns null if there isn't enough signal to work with.
+     * An onset-strength envelope: the rectified flux of log short-time energy (where the sound
+     * suddenly gets louder), then **adaptively whitened** by subtracting a local moving average so
+     * only local peaks survive. Log compression keeps a few loud transients from dominating; the
+     * local-mean subtraction keeps a sustained-loud section from doing the same. Channels are mixed
+     * to mono. Returns null if there isn't enough signal to work with.
      */
     private fun onsetEnvelope(audio: DecodedAudio): FloatArray? {
         val pcm = audio.pcm
@@ -131,9 +143,9 @@ object BeatDetector {
         val hops = frames / HOP
         if (hops < 8) return null
 
-        val env = FloatArray(hops)
+        // Pass 1: rectified log-energy flux per hop.
+        val flux = FloatArray(hops)
         var prevLogE = 0f
-        var maxVal = 0f
         for (h in 0 until hops) {
             var energy = 0f
             val frameStart = h * HOP
@@ -146,10 +158,24 @@ object BeatDetector {
             }
             energy /= HOP
             val logE = ln(1f + energy)
-            val flux = max(0f, logE - prevLogE)
-            env[h] = flux
+            flux[h] = max(0f, logE - prevLogE)
             prevLogE = logE
-            if (flux > maxVal) maxVal = flux
+        }
+
+        // Pass 2: subtract a centred local mean (prefix sums make the window O(1)) and rectify, so
+        // each onset is measured against its surroundings rather than the song's overall loudness.
+        val prefix = DoubleArray(hops + 1)
+        for (i in 0 until hops) prefix[i + 1] = prefix[i] + flux[i]
+
+        val env = FloatArray(hops)
+        var maxVal = 0f
+        for (h in 0 until hops) {
+            val lo = max(0, h - LOCAL_MEAN_HOPS)
+            val hi = min(hops, h + LOCAL_MEAN_HOPS + 1)
+            val localMean = ((prefix[hi] - prefix[lo]) / (hi - lo)).toFloat()
+            val v = max(0f, flux[h] - localMean)
+            env[h] = v
+            if (v > maxVal) maxVal = v
         }
         if (maxVal <= 0f) return null
 
