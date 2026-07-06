@@ -7,9 +7,10 @@ An Android tool for practicing song parts. Pick an audio file, mark a start/stop
 
 **Alpha software.** Early access chaos — a bold choice.
 
-## Screenshot
+## Screenshots
 
 <img src="docs/screenshot.png" alt="RubberRing loop editor" width="320" />
+<img src="docs/menu.png" alt="RubberRing menu" width="320" />
 
 ## Features
 
@@ -26,7 +27,14 @@ An Android tool for practicing song parts. Pick an audio file, mark a start/stop
   current loop-start marker. Auto-detect usually nails the tempo but can be a fraction
   of a beat off in phase; put the start handle on a beat and tap this to lock the whole
   grid to it.
-- **Saved loops** — capture a region + grid per track and restore it later.
+- **Saved loops** — capture a region + grid per track and restore it later; each library
+  entry shows its saved-loop count.
+- **Custom track titles** — rename any library entry to a friendlier name; the original file
+  name is preserved and shown faded alongside it.
+- **Follow playhead** — auto-scrolls the zoomed waveform to keep the moving playhead in view.
+- **Keep screen on** — optional toggle to stop the display sleeping during a practice session.
+- **Quick help** — an in-app cheat sheet for moving markers and the playhead, zooming, and
+  saving/recalling loops. Preferences persist across launches.
 
 ## Tech stack
 
