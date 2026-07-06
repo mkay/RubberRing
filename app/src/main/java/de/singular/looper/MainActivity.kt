@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
@@ -112,6 +113,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     val picker = rememberLauncherForActivityResult(
@@ -171,6 +173,11 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                                 onClick = { viewModel.toggleFollowPlayhead(); menuOpen = false },
                             )
                         }
+                        DropdownMenuItem(
+                            text = { Text("Quick help") },
+                            leadingIcon = { Icon(Icons.Default.HelpOutline, contentDescription = null) },
+                            onClick = { menuOpen = false; showHelp = true },
+                        )
                     }
                 },
             )
@@ -198,6 +205,58 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                 is LooperUiState.Empty -> Unit
             }
         }
+    }
+
+    if (showHelp) {
+        QuickHelpDialog(onDismiss = { showHelp = false })
+    }
+}
+
+@Composable
+private fun QuickHelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Quick help") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                HelpItem(
+                    "Move a marker",
+                    "Long-press a marker's grip tab (or its line) until it grabs, then drag it. " +
+                        "The short hold prevents accidental nudges.",
+                )
+                HelpItem(
+                    "Move the playhead",
+                    "Tap anywhere in open space to jump the playhead there, or drag near the " +
+                        "playhead line to scrub it.",
+                )
+                HelpItem(
+                    "Zoom & scroll",
+                    "Pinch with two fingers to zoom the waveform in and out. When zoomed in, " +
+                        "drag in open space to scroll, or use the minimap strip at the bottom.",
+                )
+                HelpItem(
+                    "Save a loop",
+                    "Set the start and end markers, then tap Save to store the region under a " +
+                        "name. Saved loops belong to the current track.",
+                )
+                HelpItem(
+                    "Recall a loop",
+                    "Tap a saved loop to jump its markers back into place. Long-press it for " +
+                        "rename and delete options.",
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Got it") }
+        },
+    )
+}
+
+@Composable
+private fun HelpItem(title: String, body: String) {
+    Column {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        Text(body, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

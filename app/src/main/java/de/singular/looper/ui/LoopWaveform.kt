@@ -34,10 +34,10 @@ import kotlin.math.max
 
 private val WaveColor = Color(0xFF5A6472)
 private val WaveColorActive = Color(0xFFD6D9DE) // very light neutral gray — in-region highlight
-private val HandleColor = Color(0xFFA62120) // brand primary
+private val HandleColor = Color(0xFFFFFFFF) // marker line
 private val HandleTabFill = Color(0x59FFFFFF) // translucent grip tab
 private val HandleGrip = Color(0xCC3A3F47) // grip ridges inside the tab
-private val PlayheadColor = Color(0xFFFFFFFF)
+private val PlayheadColor = Color(0xFFA62120) // brand primary
 private val DimOverlay = Color(0x99101418)
 private val MinimapTrack = Color(0x33FFFFFF)
 private val MinimapWindow = Color(0xB3FFFFFF)
