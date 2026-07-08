@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -222,6 +223,18 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             onRestore = startRestore,
         )
         return
+    }
+
+    // The library is the home view: backing out of the play view returns there rather than
+    // quitting the app. If the drawer is open, back closes that first. (This handler is only
+    // active while a track is showing — the Empty/library state returned above, so back there
+    // keeps its default behaviour of exiting.)
+    BackHandler {
+        if (drawerState.isOpen) {
+            scope.launch { drawerState.close() }
+        } else {
+            viewModel.closeTrack()
+        }
     }
 
     // Close the drawer, then run an action — used by every navigating drawer entry.
