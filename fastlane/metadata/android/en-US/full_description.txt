@@ -17,6 +17,10 @@ Features:
 * Snap to grid — drag handles snap to the quarter-note beat grid.
 * Saved loops — capture a region and grid per track and restore it later.
 * Custom track titles — rename any library entry to a friendlier name.
+* Recent tracks — quickly reopen what you were just working on.
+* Backup & restore — export your whole library (tracks and saved loops) to a
+  file and restore it after a reinstall or on another device.
+* Light & dark themes — follow the system, or force light or dark.
 * Follow playhead — auto-scrolls the zoomed waveform to keep the playhead in view.
 * Keep screen on — optional toggle to stop the display sleeping while practicing.
 

@@ -1,0 +1,7 @@
+• Light, dark, and follow-system themes
+• The library is now the home screen, with a navigation drawer everywhere; back returns there instead of quitting the app
+• New Settings screen: playback options, appearance, and library backup/restore
+• Back up and restore your whole library — tracks and saved loops — to a file
+• Saved loops and a Recent tracks list
+• Better beat detection with one-tap ½×/2× tempo fix
+• Portrait lock and a refreshed app icon
