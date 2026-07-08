@@ -23,6 +23,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
@@ -46,6 +48,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
@@ -166,6 +169,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val library by viewModel.libraryTracks.collectAsStateWithLifecycle()
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -239,6 +243,25 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
         )
     }
 
+    // Settings is a full screen shown over whatever's underneath; the confirm-restore dialog and
+    // backup-result toast above stay in scope, so Backup/Restore works from here too.
+    if (showSettings) {
+        SettingsScreen(
+            following = following,
+            keepScreenOn = keepScreenOn,
+            saveZoom = saveZoom,
+            themeMode = themeMode,
+            onToggleFollow = viewModel::toggleFollowPlayhead,
+            onToggleKeepScreenOn = viewModel::toggleKeepScreenOn,
+            onToggleSaveZoom = viewModel::toggleSaveZoom,
+            onSelectTheme = viewModel::setThemeMode,
+            onBackup = startBackup,
+            onRestore = startRestore,
+            onClose = { showSettings = false },
+        )
+        return
+    }
+
     val inLibrary = state is LooperUiState.Empty
 
     // The library is the home view. Backing out of the play view returns there rather than
@@ -264,17 +287,10 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             LooperDrawer(
                 // In the library itself the "Library" destination is redundant, so hide it.
                 showLibrary = !inLibrary,
-                following = following,
-                keepScreenOn = keepScreenOn,
-                saveZoom = saveZoom,
-                themeMode = themeMode,
                 recents = recents,
                 onLibrary = { closeThen { viewModel.closeTrack() } },
                 onImport = { closeThen { openPicker() } },
-                onToggleFollow = viewModel::toggleFollowPlayhead,
-                onToggleKeepScreenOn = viewModel::toggleKeepScreenOn,
-                onToggleSaveZoom = viewModel::toggleSaveZoom,
-                onSelectTheme = viewModel::setThemeMode,
+                onSettings = { closeThen { showSettings = true } },
                 onOpenRecent = { track -> closeThen { viewModel.open(track) } },
                 onQuickHelp = { closeThen { showHelp = true } },
             )
@@ -305,8 +321,6 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                     onOpen = viewModel::open,
                     onRename = viewModel::renameTrack,
                     onDelete = viewModel::deleteTrack,
-                    onBackup = startBackup,
-                    onRestore = startRestore,
                     modifier = Modifier.padding(innerPadding),
                 )
 
@@ -344,24 +358,85 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
 }
 
 /**
- * The left navigation drawer, shared by the library and play views: primary destinations
- * (Library — hidden when [showLibrary] is false, i.e. already in the library — and Import), the
- * quick option toggles, appearance, a recents list, and Quick help pinned to the bottom.
+ * Full-screen settings, reached from the drawer: the playback toggles, the appearance (theme)
+ * choice, and the library backup/restore actions. [onClose] backs out to the previous screen.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LooperDrawer(
-    showLibrary: Boolean,
+private fun SettingsScreen(
     following: Boolean,
     keepScreenOn: Boolean,
     saveZoom: Boolean,
     themeMode: ThemeMode,
-    recents: List<LibraryTrack>,
-    onLibrary: () -> Unit,
-    onImport: () -> Unit,
     onToggleFollow: () -> Unit,
     onToggleKeepScreenOn: () -> Unit,
     onToggleSaveZoom: () -> Unit,
     onSelectTheme: (ThemeMode) -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+    onClose: () -> Unit,
+) {
+    BackHandler(onBack = onClose)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                title = { Text("Settings") },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp),
+        ) {
+            DrawerSectionLabel("Playback")
+            SettingSwitchRow("Follow playhead", Icons.Default.MyLocation, following, onToggleFollow)
+            SettingSwitchRow("Keep screen on", Icons.Default.Lightbulb, keepScreenOn, onToggleKeepScreenOn)
+            SettingSwitchRow("Save zoom level", Icons.Default.ZoomIn, saveZoom, onToggleSaveZoom)
+
+            DrawerSectionLabel("Appearance")
+            ThemeModeChips(
+                mode = themeMode,
+                onSelect = onSelectTheme,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+
+            DrawerSectionLabel("Library")
+            BackupChoiceRow(
+                icon = Icons.Default.Save,
+                title = "Back up library",
+                subtitle = "Save all tracks and loops to a file",
+                onClick = onBackup,
+            )
+            BackupChoiceRow(
+                icon = Icons.Default.Restore,
+                title = "Restore library",
+                subtitle = "Replace everything from a backup file",
+                onClick = onRestore,
+            )
+        }
+    }
+}
+
+/**
+ * The left navigation drawer, shared by the library and play views: primary destinations
+ * (Library — hidden when [showLibrary] is false, i.e. already in the library — Import, and
+ * Settings), a recents list, and Quick help pinned to the bottom.
+ */
+@Composable
+private fun LooperDrawer(
+    showLibrary: Boolean,
+    recents: List<LibraryTrack>,
+    onLibrary: () -> Unit,
+    onImport: () -> Unit,
+    onSettings: () -> Unit,
     onOpenRecent: (LibraryTrack) -> Unit,
     onQuickHelp: () -> Unit,
 ) {
@@ -391,18 +466,12 @@ private fun LooperDrawer(
                 onClick = onImport,
                 modifier = itemPadding,
             )
-
-            DrawerSectionLabel("Options")
-            // Toggles keep the drawer open — you flip them and see the effect without it closing.
-            DrawerOptionSwitch("Follow playhead", Icons.Default.MyLocation, following, onToggleFollow)
-            DrawerOptionSwitch("Keep screen on", Icons.Default.Lightbulb, keepScreenOn, onToggleKeepScreenOn)
-            DrawerOptionSwitch("Save zoom level", Icons.Default.ZoomIn, saveZoom, onToggleSaveZoom)
-
-            DrawerSectionLabel("Appearance")
-            ThemeModeChips(
-                mode = themeMode,
-                onSelect = onSelectTheme,
-                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+            NavigationDrawerItem(
+                label = { Text("Settings") },
+                icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                selected = false,
+                onClick = onSettings,
+                modifier = itemPadding,
             )
 
             if (recents.isNotEmpty()) {
@@ -470,12 +539,9 @@ private fun ThemeModeChips(
     }
 }
 
-/**
- * An option row with a trailing switch. Tapping anywhere on the row toggles it and — unlike a
- * [NavigationDrawerItem] — leaves the drawer open so the change is visible in place.
- */
+/** A settings row: icon + label with a trailing switch; tapping anywhere on the row toggles it. */
 @Composable
-private fun DrawerOptionSwitch(
+private fun SettingSwitchRow(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     checked: Boolean,
@@ -484,15 +550,14 @@ private fun DrawerOptionSwitch(
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(NavigationDrawerItemDefaults.ItemPadding)
             .clip(ControlShape)
             .clickable(onClick = onToggle)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.width(12.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = { onToggle() })
     }
 }
@@ -552,13 +617,10 @@ private fun LibraryContent(
     onOpen: (LibraryTrack) -> Unit,
     onRename: (LibraryTrack, String) -> Unit,
     onDelete: (LibraryTrack) -> Unit,
-    onBackup: () -> Unit,
-    onRestore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var deleteTarget by remember { mutableStateOf<LibraryTrack?>(null) }
     var renameTarget by remember { mutableStateOf<LibraryTrack?>(null) }
-    var showBackupChoices by remember { mutableStateOf(false) }
 
     Column(
         modifier.fillMaxSize().padding(16.dp),
@@ -614,40 +676,6 @@ private fun LibraryContent(
                 }
             }
         }
-
-        // A single quiet entry below opens a chooser for backing up or restoring. It lives here
-        // so a fresh install can restore before anything is imported.
-        Spacer(Modifier.height(6.dp))
-        BackupTextAction("Backup / Restore Library") { showBackupChoices = true }
-    }
-
-    if (showBackupChoices) {
-        AlertDialog(
-            onDismissRequest = { showBackupChoices = false },
-            title = { Text("Backup / Restore Library") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // Nothing to back up on a fresh, empty library — offer only Restore then.
-                    if (library.isNotEmpty()) {
-                        BackupChoiceRow(
-                            icon = Icons.Default.Save,
-                            title = "Back up library",
-                            subtitle = "Save all tracks and loops to a file",
-                            onClick = { showBackupChoices = false; onBackup() },
-                        )
-                    }
-                    BackupChoiceRow(
-                        icon = Icons.Default.Restore,
-                        title = "Restore library",
-                        subtitle = "Replace everything from a backup file",
-                        onClick = { showBackupChoices = false; onRestore() },
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showBackupChoices = false }) { Text("Cancel") }
-            },
-        )
     }
 
     deleteTarget?.let { target ->
@@ -679,21 +707,7 @@ private fun LibraryContent(
     }
 }
 
-/** A small, muted text action (used for the backup/restore entry under the library list). */
-@Composable
-private fun BackupTextAction(label: String, onClick: () -> Unit) {
-    Text(
-        label,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .clip(ControlShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    )
-}
-
-/** One selectable option (icon + title + subtitle) in the backup/restore chooser dialog. */
+/** One selectable option (icon + title + subtitle) in the backup/restore section. */
 @Composable
 private fun BackupChoiceRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -706,11 +720,11 @@ private fun BackupChoiceRow(
             .fillMaxWidth()
             .clip(ControlShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(16.dp))
         Column {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
