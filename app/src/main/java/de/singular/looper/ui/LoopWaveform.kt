@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,6 +23,7 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -32,17 +34,52 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.max
 
-private val WaveColor = Color(0xFF5A6472)
-private val WaveColorActive = Color(0xFFD6D9DE) // very light neutral gray — in-region highlight
-private val HandleColor = Color(0xFFFFFFFF) // marker line
-private val HandleTabFill = Color(0x59FFFFFF) // translucent grip tab
-private val HandleGrip = Color(0xCC3A3F47) // grip ridges inside the tab
-private val PlayheadColor = Color(0xFFA62120) // brand primary
-private val DimOverlay = Color(0x99101418)
-private val MinimapTrack = Color(0x33FFFFFF)
-private val MinimapWindow = Color(0xB3FFFFFF)
-private val GridLine = Color(0x22FFFFFF)
-private val DownbeatLine = Color(0x55FFFFFF)
+private val PlayheadColor = Color(0xFFA62120) // brand primary — same in both themes
+
+/**
+ * The full set of colours the waveform paints with, swapped as a unit for light vs. dark themes.
+ * The active (in-region) wave must be the *prominent* one and the [dim] overlay must wash the
+ * out-of-region wave *toward* the background — so both invert between themes.
+ */
+private class WaveformColors(
+    val wave: Color,       // out-of-region wave (de-emphasised)
+    val waveActive: Color, // in-region wave (emphasised)
+    val handle: Color,     // marker line
+    val tabFill: Color,    // translucent grip tab
+    val grip: Color,       // grip ridges inside the tab
+    val dim: Color,        // scrim over the out-of-region areas
+    val minimapTrack: Color,
+    val minimapWindow: Color,
+    val gridLine: Color,
+    val downbeatLine: Color,
+)
+
+private val DarkWaveformColors = WaveformColors(
+    wave = Color(0xFF5A6472),
+    waveActive = Color(0xFFD6D9DE), // very light neutral gray — stands out on a dark background
+    handle = Color(0xFFFFFFFF),
+    tabFill = Color(0x59FFFFFF),
+    grip = Color(0xCC3A3F47),
+    dim = Color(0x99101418), // dark scrim
+    minimapTrack = Color(0x33FFFFFF),
+    minimapWindow = Color(0xB3FFFFFF),
+    gridLine = Color(0x22FFFFFF),
+    downbeatLine = Color(0x55FFFFFF),
+)
+
+private val LightWaveformColors = WaveformColors(
+    wave = Color(0xFFACB2BC), // light-medium gray — recedes on a light background
+    waveActive = Color(0xFF121418), // near-black — the dark backdrop the light handles pop against
+    // Handles stay light (as in dark mode): the darkened in-region wave gives them the contrast.
+    handle = Color(0xFFFFFFFF),
+    tabFill = Color(0x66FFFFFF),
+    grip = Color(0xCC3A3F47),
+    dim = Color(0x8AFFFFFF), // light scrim washes the out-of-region toward the background
+    minimapTrack = Color(0x33000000),
+    minimapWindow = Color(0x99000000),
+    gridLine = Color(0x12000000),
+    downbeatLine = Color(0x38000000),
+)
 
 private const val MAX_ZOOM = 80f
 
@@ -104,6 +141,11 @@ fun LoopWaveform(
     val playhead by rememberUpdatedState(playheadFrac)
     val seek by rememberUpdatedState(onSeek)
     val haptic = LocalHapticFeedback.current
+
+    // Pick the light or dark waveform palette to match the theme actually in effect (which may
+    // differ from the OS setting when the user forces a mode). The surface colour tells us which.
+    val colors = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f)
+        DarkWaveformColors else LightWaveformColors
 
     // Viewport state, seeded from the caller and reset when a new file is loaded.
     var zoom by remember(waveform) { mutableFloatStateOf(initialZoom) }
@@ -288,7 +330,7 @@ fun LoopWaveform(
             if (mn == Float.POSITIVE_INFINITY) { mn = 0f; mx = 0f }
             val inRegion = fL >= start && fR <= end
             drawLine(
-                color = if (inRegion) WaveColorActive else WaveColor,
+                color = if (inRegion) colors.waveActive else colors.wave,
                 start = Offset(x.toFloat(), midY - mx * midY),
                 end = Offset(x.toFloat(), midY - mn * midY),
                 strokeWidth = 1f,
@@ -309,7 +351,7 @@ fun LoopWaveform(
                     if (gx < 0f || gx > w) continue
                     val isBeat = gridLinesPerBeat <= 1 || k % gridLinesPerBeat == 0
                     drawLine(
-                        color = if (isBeat) DownbeatLine else GridLine,
+                        color = if (isBeat) colors.downbeatLine else colors.gridLine,
                         start = Offset(gx, 0f),
                         end = Offset(gx, h),
                         strokeWidth = if (isBeat) 2f else 1f,
@@ -320,13 +362,13 @@ fun LoopWaveform(
 
         val startX = fracToX(start).coerceIn(0f, w)
         val endX = fracToX(end).coerceIn(0f, w)
-        if (startX > 0f) drawRect(DimOverlay, topLeft = Offset(0f, 0f), size = Size(startX, h))
-        if (endX < w) drawRect(DimOverlay, topLeft = Offset(endX, 0f), size = Size(w - endX, h))
+        if (startX > 0f) drawRect(colors.dim, topLeft = Offset(0f, 0f), size = Size(startX, h))
+        if (endX < w) drawRect(colors.dim, topLeft = Offset(endX, 0f), size = Size(w - endX, h))
 
         // Tabs point into the loop region (start → right, end → left) so they stay on-screen
         // even when a marker is pushed against the edge.
-        fracToX(start).let { if (it in 0f..w) drawHandle(it, h, towardRight = true) }
-        fracToX(end).let { if (it in 0f..w) drawHandle(it, h, towardRight = false) }
+        fracToX(start).let { if (it in 0f..w) drawHandle(it, h, towardRight = true, colors) }
+        fracToX(end).let { if (it in 0f..w) drawHandle(it, h, towardRight = false, colors) }
 
         if (showPlayhead) {
             val px = fracToX(playheadFrac)
@@ -339,10 +381,10 @@ fun LoopWaveform(
             val stripH = SCROLLBAR_HEIGHT.toPx()
             val y = h - stripH
             val radius = CornerRadius(stripH / 2f, stripH / 2f)
-            drawRoundRect(MinimapTrack, topLeft = Offset(0f, y), size = Size(w, stripH), cornerRadius = radius)
+            drawRoundRect(colors.minimapTrack, topLeft = Offset(0f, y), size = Size(w, stripH), cornerRadius = radius)
             val thumbW = ((1f / zoom) * w).coerceAtLeast(stripH)
             val thumbX = (offset * w).coerceIn(0f, w - thumbW)
-            drawRoundRect(MinimapWindow, topLeft = Offset(thumbX, y), size = Size(thumbW, stripH), cornerRadius = radius)
+            drawRoundRect(colors.minimapWindow, topLeft = Offset(thumbX, y), size = Size(thumbW, stripH), cornerRadius = radius)
         }
     }
 }
@@ -351,8 +393,9 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHandle(
     x: Float,
     h: Float,
     towardRight: Boolean,
+    colors: WaveformColors,
 ) {
-    drawLine(HandleColor, start = Offset(x, 0f), end = Offset(x, h), strokeWidth = 4f)
+    drawLine(colors.handle, start = Offset(x, 0f), end = Offset(x, h), strokeWidth = 4f)
 
     // A tall translucent tab beside the line, centred vertically — a large, obvious grab
     // target. Only the two corners away from the line are rounded, so the tab reads as
@@ -374,7 +417,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHandle(
             )
         )
     }
-    drawPath(tab, HandleTabFill)
+    drawPath(tab, colors.tabFill)
 
     // Two grip ridges centred in the tab.
     val cx = left + tabW / 2f
@@ -383,7 +426,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHandle(
     val gripWidth = 2.dp.toPx()
     for (dx in floatArrayOf(-gap, gap)) {
         drawLine(
-            HandleGrip,
+            colors.grip,
             start = Offset(cx + dx, h / 2f - gripHalf),
             end = Offset(cx + dx, h / 2f + gripHalf),
             strokeWidth = gripWidth,
