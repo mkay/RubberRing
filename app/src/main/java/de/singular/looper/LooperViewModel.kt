@@ -48,6 +48,7 @@ const val MAX_SAVED_LOOPS = 4
 private const val KEY_FOLLOW_PLAYHEAD = "follow_playhead"
 private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
 private const val KEY_SAVE_ZOOM = "save_zoom"
+private const val KEY_THEME_MODE = "theme_mode"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
@@ -60,6 +61,13 @@ data class Viewport(val zoom: Float, val offset: Float)
 
 /** One-shot outcome of a backup/restore, surfaced to the UI as a message. */
 enum class BackupResult { EXPORTED, RESTORED, FAILED }
+
+/** How the app picks its light/dark colours: follow the OS, or force one. */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** Parse a stored [ThemeMode] name, falling back to [ThemeMode.SYSTEM] for null/unknown values. */
+private fun readThemeMode(name: String?): ThemeMode =
+    ThemeMode.entries.firstOrNull { it.name == name } ?: ThemeMode.SYSTEM
 
 /**
  * The beat grid. [downbeatFrac] anchors the grid (position of a downbeat as a fraction of
@@ -136,6 +144,14 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit { putBoolean(KEY_SAVE_ZOOM, _saveZoom.value) }
     }
 
+    private val _themeMode = MutableStateFlow(readThemeMode(prefs.getString(KEY_THEME_MODE, null)))
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        prefs.edit { putString(KEY_THEME_MODE, mode.name) }
+    }
+
     // The live waveform viewport, mirrored up from the waveform so it can be saved on exit.
     private val _viewport = MutableStateFlow(Viewport(1f, 0f))
     val viewport: StateFlow<Viewport> = _viewport.asStateFlow()
@@ -197,6 +213,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         .put(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
         .put(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
         .put(KEY_SAVE_ZOOM, _saveZoom.value)
+        .put(KEY_THEME_MODE, _themeMode.value.name)
         .toString()
 
     private fun applySettingsJson(json: String?) {
@@ -204,10 +221,12 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (o.has(KEY_FOLLOW_PLAYHEAD)) _followPlayhead.value = o.getBoolean(KEY_FOLLOW_PLAYHEAD)
         if (o.has(KEY_KEEP_SCREEN_ON)) _keepScreenOn.value = o.getBoolean(KEY_KEEP_SCREEN_ON)
         if (o.has(KEY_SAVE_ZOOM)) _saveZoom.value = o.getBoolean(KEY_SAVE_ZOOM)
+        if (o.has(KEY_THEME_MODE)) _themeMode.value = readThemeMode(o.getString(KEY_THEME_MODE))
         prefs.edit {
             putBoolean(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
             putBoolean(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
             putBoolean(KEY_SAVE_ZOOM, _saveZoom.value)
+            putString(KEY_THEME_MODE, _themeMode.value.name)
         }
     }
 

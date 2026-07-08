@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -74,10 +75,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,6 +90,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
@@ -94,6 +98,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.singular.looper.audio.DecodedAudio
@@ -105,7 +110,14 @@ import kotlinx.coroutines.launch
 // Brand colour used for buttons, chips, and the marker accents.
 private val BrandPrimary = Color(0xFFA62120)
 
-private val LooperColors = darkColorScheme(
+private val LooperDarkColors = darkColorScheme(
+    primary = BrandPrimary,
+    onPrimary = Color(0xFFFFFFFF),
+    secondaryContainer = BrandPrimary,
+    onSecondaryContainer = Color(0xFFFFFFFF),
+)
+
+private val LooperLightColors = lightColorScheme(
     primary = BrandPrimary,
     onPrimary = Color(0xFFFFFFFF),
     secondaryContainer = BrandPrimary,
@@ -120,9 +132,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme(colorScheme = LooperColors) {
+            val viewModel: LooperViewModel = viewModel()
+            val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+            val dark = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            // Keep the system bar icons legible against whichever theme is in effect (the
+            // enableEdgeToEdge default only tracks the OS setting, not our in-app override).
+            val view = LocalView.current
+            SideEffect {
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+            MaterialTheme(colorScheme = if (dark) LooperDarkColors else LooperLightColors) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    LooperScreen()
+                    LooperScreen(viewModel)
                 }
             }
         }
@@ -136,6 +164,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
     val keepScreenOn by viewModel.keepScreenOn.collectAsStateWithLifecycle()
     val saveZoom by viewModel.saveZoom.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val library by viewModel.libraryTracks.collectAsStateWithLifecycle()
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
@@ -215,6 +244,8 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     if (state is LooperUiState.Empty) {
         EmptyScreen(
             library,
+            themeMode = themeMode,
+            onSelectTheme = viewModel::setThemeMode,
             onImport = { openPicker() },
             onOpen = viewModel::open,
             onRename = viewModel::renameTrack,
@@ -250,12 +281,14 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                 following = following,
                 keepScreenOn = keepScreenOn,
                 saveZoom = saveZoom,
+                themeMode = themeMode,
                 recents = recents,
                 onLibrary = { closeThen { viewModel.closeTrack() } },
                 onImport = { closeThen { openPicker() } },
                 onToggleFollow = viewModel::toggleFollowPlayhead,
                 onToggleKeepScreenOn = viewModel::toggleKeepScreenOn,
                 onToggleSaveZoom = viewModel::toggleSaveZoom,
+                onSelectTheme = viewModel::setThemeMode,
                 onOpenRecent = { track -> closeThen { viewModel.open(track) } },
                 onQuickHelp = { closeThen { showHelp = true } },
             )
@@ -311,19 +344,21 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
 
 /**
  * The left navigation drawer for the play view: primary destinations (Library, Import), the
- * quick option toggles, a recents list, and Quick help pinned to the bottom.
+ * quick option toggles, appearance, a recents list, and Quick help pinned to the bottom.
  */
 @Composable
 private fun LooperDrawer(
     following: Boolean,
     keepScreenOn: Boolean,
     saveZoom: Boolean,
+    themeMode: ThemeMode,
     recents: List<LibraryTrack>,
     onLibrary: () -> Unit,
     onImport: () -> Unit,
     onToggleFollow: () -> Unit,
     onToggleKeepScreenOn: () -> Unit,
     onToggleSaveZoom: () -> Unit,
+    onSelectTheme: (ThemeMode) -> Unit,
     onOpenRecent: (LibraryTrack) -> Unit,
     onQuickHelp: () -> Unit,
 ) {
@@ -357,6 +392,13 @@ private fun LooperDrawer(
             DrawerOptionSwitch("Follow playhead", Icons.Default.MyLocation, following, onToggleFollow)
             DrawerOptionSwitch("Keep screen on", Icons.Default.Lightbulb, keepScreenOn, onToggleKeepScreenOn)
             DrawerOptionSwitch("Save zoom level", Icons.Default.ZoomIn, saveZoom, onToggleSaveZoom)
+
+            DrawerSectionLabel("Appearance")
+            ThemeModeChips(
+                mode = themeMode,
+                onSelect = onSelectTheme,
+                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+            )
 
             if (recents.isNotEmpty()) {
                 DrawerSectionLabel("Recent")
@@ -394,6 +436,33 @@ private fun DrawerSectionLabel(text: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 28.dp, top = 16.dp, bottom = 4.dp),
     )
+}
+
+/** A single-select row of Follow system / Light / Dark chips, shared by the drawer and library. */
+@Composable
+private fun ThemeModeChips(
+    mode: ThemeMode,
+    onSelect: (ThemeMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val label = mapOf(
+            ThemeMode.SYSTEM to "System",
+            ThemeMode.LIGHT to "Light",
+            ThemeMode.DARK to "Dark",
+        )
+        ThemeMode.entries.forEach { m ->
+            FilterChip(
+                selected = mode == m,
+                onClick = { onSelect(m) },
+                label = { Text(label.getValue(m)) },
+                shape = ControlShape,
+            )
+        }
+    }
 }
 
 /**
@@ -474,6 +543,8 @@ private fun HelpItem(title: String, body: String) {
 @Composable
 private fun EmptyScreen(
     library: List<LibraryTrack>,
+    themeMode: ThemeMode,
+    onSelectTheme: (ThemeMode) -> Unit,
     onImport: () -> Unit,
     onOpen: (LibraryTrack) -> Unit,
     onRename: (LibraryTrack, String) -> Unit,
@@ -549,8 +620,13 @@ private fun EmptyScreen(
             }
         }
 
-        // A single quiet entry below the list opens a chooser for backing up or restoring.
-        // It lives here so a fresh install can restore before anything is imported.
+        // The library is the home view and has no drawer, so the theme control lives here too —
+        // a fresh install can switch appearance before opening anything.
+        Spacer(Modifier.height(16.dp))
+        ThemeModeChips(mode = themeMode, onSelect = onSelectTheme)
+
+        // A single quiet entry below opens a chooser for backing up or restoring. It lives here
+        // so a fresh install can restore before anything is imported.
         Spacer(Modifier.height(6.dp))
         BackupTextAction("Backup / Restore Library") { showBackupChoices = true }
     }
