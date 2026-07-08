@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -241,26 +240,12 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
         )
     }
 
-    if (state is LooperUiState.Empty) {
-        EmptyScreen(
-            library,
-            themeMode = themeMode,
-            onSelectTheme = viewModel::setThemeMode,
-            onImport = { openPicker() },
-            onOpen = viewModel::open,
-            onRename = viewModel::renameTrack,
-            onDelete = viewModel::deleteTrack,
-            onBackup = startBackup,
-            onRestore = startRestore,
-        )
-        return
-    }
+    val inLibrary = state is LooperUiState.Empty
 
-    // The library is the home view: backing out of the play view returns there rather than
-    // quitting the app. If the drawer is open, back closes that first. (This handler is only
-    // active while a track is showing — the Empty/library state returned above, so back there
-    // keeps its default behaviour of exiting.)
-    BackHandler {
+    // The library is the home view. Backing out of the play view returns there rather than
+    // quitting; a swipe-back with the drawer open just closes the drawer. In the library with the
+    // drawer closed the handler is disabled, so back keeps its default behaviour of exiting.
+    BackHandler(enabled = drawerState.isOpen || !inLibrary) {
         if (drawerState.isOpen) {
             scope.launch { drawerState.close() }
         } else {
@@ -278,6 +263,8 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
         drawerState = drawerState,
         drawerContent = {
             LooperDrawer(
+                // In the library itself the "Library" destination is redundant, so hide it.
+                showLibrary = !inLibrary,
                 following = following,
                 keepScreenOn = keepScreenOn,
                 saveZoom = saveZoom,
@@ -312,26 +299,41 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                 )
             },
         ) { innerPadding ->
-            Box(
-                Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                when (val s = state) {
-                    is LooperUiState.Loading -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(8.dp))
-                        Text("Decoding…")
+            when (val s = state) {
+                is LooperUiState.Empty -> LibraryContent(
+                    library = library,
+                    onImport = { openPicker() },
+                    onOpen = viewModel::open,
+                    onRename = viewModel::renameTrack,
+                    onDelete = viewModel::deleteTrack,
+                    onBackup = startBackup,
+                    onRestore = startRestore,
+                    modifier = Modifier.padding(innerPadding),
+                )
+
+                else -> Box(
+                    Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when (s) {
+                        is LooperUiState.Loading -> Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(8.dp))
+                            Text("Decoding…")
+                        }
+
+                        is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel)
+
+                        is LooperUiState.Error -> Text(
+                            "Error: ${s.message}",
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+
+                        is LooperUiState.Empty -> Unit
                     }
-
-                    is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel)
-
-                    is LooperUiState.Error -> Text(
-                        "Error: ${s.message}",
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-
-                    is LooperUiState.Empty -> Unit
                 }
             }
         }
@@ -343,11 +345,13 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
 }
 
 /**
- * The left navigation drawer for the play view: primary destinations (Library, Import), the
+ * The left navigation drawer, shared by the library and play views: primary destinations
+ * (Library — hidden when [showLibrary] is false, i.e. already in the library — and Import), the
  * quick option toggles, appearance, a recents list, and Quick help pinned to the bottom.
  */
 @Composable
 private fun LooperDrawer(
+    showLibrary: Boolean,
     following: Boolean,
     keepScreenOn: Boolean,
     saveZoom: Boolean,
@@ -372,13 +376,15 @@ private fun LooperDrawer(
             )
 
             val itemPadding = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-            NavigationDrawerItem(
-                label = { Text("Library") },
-                icon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
-                selected = false,
-                onClick = onLibrary,
-                modifier = itemPadding,
-            )
+            if (showLibrary) {
+                NavigationDrawerItem(
+                    label = { Text("Library") },
+                    icon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
+                    selected = false,
+                    onClick = onLibrary,
+                    modifier = itemPadding,
+                )
+            }
             NavigationDrawerItem(
                 label = { Text("Import new file") },
                 icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
@@ -541,25 +547,22 @@ private fun HelpItem(title: String, body: String) {
 }
 
 @Composable
-private fun EmptyScreen(
+private fun LibraryContent(
     library: List<LibraryTrack>,
-    themeMode: ThemeMode,
-    onSelectTheme: (ThemeMode) -> Unit,
     onImport: () -> Unit,
     onOpen: (LibraryTrack) -> Unit,
     onRename: (LibraryTrack, String) -> Unit,
     onDelete: (LibraryTrack) -> Unit,
     onBackup: () -> Unit,
     onRestore: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var deleteTarget by remember { mutableStateOf<LibraryTrack?>(null) }
     var renameTarget by remember { mutableStateOf<LibraryTrack?>(null) }
     var showBackupChoices by remember { mutableStateOf(false) }
 
     Column(
-        // This screen renders outside the Scaffold, so apply system-bar insets ourselves
-        // (edge-to-edge is on) — otherwise the button slides under the status bar.
-        Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp),
+        modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // With no library yet, centre the welcome block vertically; otherwise pin it to the top
@@ -578,8 +581,6 @@ private fun EmptyScreen(
             )
         }
         Spacer(Modifier.height(12.dp))
-        Text("Rubber Ring", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(8.dp))
         Text(
             "Pick an audio file to mark and loop a section.",
             style = MaterialTheme.typography.bodyMedium,
@@ -619,11 +620,6 @@ private fun EmptyScreen(
                 }
             }
         }
-
-        // The library is the home view and has no drawer, so the theme control lives here too —
-        // a fresh install can switch appearance before opening anything.
-        Spacer(Modifier.height(16.dp))
-        ThemeModeChips(mode = themeMode, onSelect = onSelectTheme)
 
         // A single quiet entry below opens a chooser for backing up or restoring. It lives here
         // so a fresh install can restore before anything is imported.
