@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -569,17 +568,12 @@ private fun LibraryContent(
         // and let the list fill the space below.
         if (library.isEmpty()) Spacer(Modifier.weight(1f))
 
-        // App icon in a rounded tile matching the launcher icon.
-        Box(
-            Modifier.size(96.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF1A1A1A)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        // The ring logo on its own — no tile — so it reads cleanly on either theme.
+        Image(
+            painter = painterResource(R.drawable.ic_ring),
+            contentDescription = null,
+            modifier = Modifier.size(96.dp),
+        )
         Spacer(Modifier.height(12.dp))
         Text(
             "Pick an audio file to mark and loop a section.",
