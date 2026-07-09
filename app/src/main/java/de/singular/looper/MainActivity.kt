@@ -173,6 +173,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showKeepAwakeInfo by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -314,6 +315,17 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                             overflow = TextOverflow.Ellipsis,
                         )
                     },
+                    actions = {
+                        // A quiet notice that the display is being kept awake (it drains battery);
+                        // tap for an explanation and a shortcut to turn it off.
+                        if (keepScreenOn) {
+                            IconButton(onClick = { showKeepAwakeInfo = true }) {
+                                // No explicit tint: inherits the app bar's content colour (white on
+                                // the dark bar), matching the menu icon rather than an accent tone.
+                                Icon(Icons.Default.Lightbulb, contentDescription = "Screen kept on")
+                            }
+                        }
+                    },
                 )
             },
         ) { innerPadding ->
@@ -357,6 +369,28 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
 
     if (showHelp) {
         QuickHelpDialog(onDismiss = { showHelp = false })
+    }
+
+    if (showKeepAwakeInfo) {
+        AlertDialog(
+            onDismissRequest = { showKeepAwakeInfo = false },
+            icon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+            title = { Text("Screen stays on") },
+            text = {
+                Text(
+                    "“Keep screen on” is enabled, so the display won't dim or lock while a track " +
+                        "is open. Handy for practice, but it uses more battery.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showKeepAwakeInfo = false; showSettings = true }) {
+                    Text("Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showKeepAwakeInfo = false }) { Text("Got it") }
+            },
+        )
     }
 }
 
