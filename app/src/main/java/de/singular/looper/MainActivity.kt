@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -70,6 +71,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -103,6 +105,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.singular.looper.audio.DecodedAudio
+import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.SavedLoop
 import de.singular.looper.ui.LoopWaveform
@@ -821,6 +824,8 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val loops by viewModel.savedLoops.collectAsStateWithLifecycle()
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
+    val speed by viewModel.speed.collectAsStateWithLifecycle()
+    val stretching by viewModel.stretching.collectAsStateWithLifecycle()
     val durationMs = audio.durationMs
 
     val intervalFrac = if (grid.bpm > 0f && durationMs > 0)
@@ -880,6 +885,10 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             Spacer(Modifier.width(8.dp))
             Text(if (isPlaying) "Stop" else "Play")
         }
+
+        Spacer(Modifier.height(8.dp))
+
+        SpeedControl(speed, stretching, viewModel::setSpeed)
 
         Spacer(Modifier.height(8.dp))
 
@@ -1020,6 +1029,41 @@ private fun LoopNameDialog(
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SpeedControl(speed: Float, stretching: Boolean, onSpeedChange: (Float) -> Unit) {
+    // Track the drag locally and only commit on release — each commit re-runs WSOLA off-thread,
+    // so we don't want to fire on every pixel of the drag.
+    var dragValue by remember { mutableStateOf<Float?>(null) }
+    val shown = dragValue ?: speed
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Speed", style = MaterialTheme.typography.labelMedium)
+        Slider(
+            value = shown,
+            onValueChange = { dragValue = it },
+            onValueChangeFinished = { dragValue?.let(onSpeedChange); dragValue = null },
+            valueRange = LoopPlayer.MIN_SPEED..LoopPlayer.MAX_SPEED,
+            steps = 19, // 0.5×..1.5× in 0.05 detents (19 interior stops), so 1.00× is easy to land on
+            modifier = Modifier.weight(1f),
+        )
+        // A spinner while the stretch computes; otherwise the value, tappable to reset to 1×.
+        if (stretching) {
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        } else {
+            Text(
+                "%.2f×".format(shown),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier
+                    .widthIn(min = 48.dp)
+                    .clickable { onSpeedChange(1f) },
+            )
+        }
+    }
+}
+
 @Composable
 private fun BeatControls(grid: BeatGridState, detecting: Boolean, viewModel: LooperViewModel) {
     Column(

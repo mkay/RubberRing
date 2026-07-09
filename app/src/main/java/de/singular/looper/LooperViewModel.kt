@@ -10,6 +10,7 @@ import de.singular.looper.audio.AudioDecoder
 import de.singular.looper.audio.BeatDetector
 import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.LoopPlayer
+import de.singular.looper.audio.TimeStretch
 import de.singular.looper.audio.WaveformData
 import de.singular.looper.library.LibraryRepository
 import de.singular.looper.library.LibraryTrack
@@ -100,6 +101,86 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _detecting = MutableStateFlow(false)
     val detecting: StateFlow<Boolean> = _detecting.asStateFlow()
+
+    // Playback speed (pitch preserved). Transient per session — reset to 1× on each load.
+    private val _speed = MutableStateFlow(1f)
+    val speed: StateFlow<Float> = _speed.asStateFlow()
+
+    // True while a WSOLA stretch is being computed off-thread (drives a small spinner).
+    private val _stretching = MutableStateFlow(false)
+    val stretching: StateFlow<Boolean> = _stretching.asStateFlow()
+
+    // When the player holds a time-stretched buffer it contains only the region [stretchStart,
+    // stretchEnd] of the file (stretched to a different length), so playhead/seek must map
+    // between file fractions and the buffer. At 1× the player holds the full original file and
+    // no mapping is needed.
+    private var stretched = false
+    private var stretchStartFrac = 0f
+    private var stretchEndFrac = 1f
+
+    /** Set playback speed (pitch preserved). Rebuilds the stretched region buffer off-thread. */
+    fun setSpeed(value: Float) {
+        _speed.value = value.coerceIn(LoopPlayer.MIN_SPEED, LoopPlayer.MAX_SPEED)
+        rebuildPlayback()
+    }
+
+    /**
+     * (Re)build the playback buffer for the current speed + region. At 1× the player loops the
+     * original full-file PCM; otherwise it loops a WSOLA-stretched copy of just the loop region
+     * (offline, so quality doesn't fight a real-time deadline). Resumes playback if it was on.
+     */
+    private fun rebuildPlayback() {
+        val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
+        val s = _speed.value
+        val r = _region.value
+        val wasPlaying = _isPlaying.value
+        stretchJob?.cancel()
+
+        if (s == 1f) {
+            _stretching.value = false
+            swapPlayer(audio.pcm, audio.channels, audio.sampleRate, isStretched = false, r, audio, wasPlaying)
+            return
+        }
+
+        _stretching.value = true
+        stretchJob = viewModelScope.launch {
+            val startF = audio.fractionToFrame(r.startFrac)
+            val endF = audio.fractionToFrame(r.endFrac).coerceAtLeast(startF + 1)
+            val buffer = withContext(Dispatchers.Default) {
+                val slice = audio.pcm.copyOfRange(startF * audio.channels, endF * audio.channels)
+                TimeStretch.stretch(slice, audio.channels, audio.sampleRate, s)
+            }
+            if (!isActive) return@launch // a newer speed/region change superseded this one
+            stretchStartFrac = r.startFrac
+            stretchEndFrac = r.endFrac
+            swapPlayer(buffer, audio.channels, audio.sampleRate, isStretched = true, r, audio, wasPlaying)
+            _stretching.value = false
+        }
+    }
+
+    /** Replace the player with one over [pcm], restore the loop region, and optionally resume. */
+    private fun swapPlayer(
+        pcm: ShortArray,
+        channels: Int,
+        sampleRate: Int,
+        isStretched: Boolean,
+        r: LoopRegion,
+        audio: DecodedAudio,
+        resume: Boolean,
+    ) {
+        stopPlayback()
+        player?.release()
+        stretched = isStretched
+        val p = LoopPlayer(pcm, channels, sampleRate)
+        player = p
+        if (isStretched) {
+            p.setRegion(0, p.frameCount) // the whole stretched buffer *is* the loop
+        } else {
+            p.setRegion(audio.fractionToFrame(r.startFrac), audio.fractionToFrame(r.endFrac))
+        }
+        _playhead.value = r.startFrac
+        if (resume) startPlayback()
+    }
 
     private val library = LibraryRepository(app)
     private val _library = MutableStateFlow<List<LibraryTrack>>(emptyList())
@@ -234,6 +315,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private fun discardOpenTrack() {
         loadJob?.cancel()
         detectJob?.cancel()
+        stretchJob?.cancel()
+        _stretching.value = false
+        stretched = false
         stopPlayback()
         player?.release()
         player = null
@@ -249,6 +333,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private var loadJob: Job? = null
     private var tickerJob: Job? = null
     private var detectJob: Job? = null
+    private var stretchJob: Job? = null
 
     // The library track currently open, if any. Its loop state is kept in sync with the UI.
     private var currentTrack: LibraryTrack? = null
@@ -261,6 +346,11 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 .drop(1)
                 .debounce(350)
                 .collect { (r, g) -> saveLoopState(r, g) }
+        }
+        // When stretched, the region defines what gets stretched — re-run WSOLA once the user
+        // settles on new markers (debounced so a drag doesn't thrash the analyser).
+        viewModelScope.launch {
+            _region.drop(1).debounce(350).collect { if (stretched) rebuildPlayback() }
         }
     }
 
@@ -335,7 +425,10 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private fun startLoad(displayName: String?) {
         loadJob?.cancel()
         detectJob?.cancel()
+        stretchJob?.cancel()
         _detecting.value = false
+        _stretching.value = false
+        stretched = false
         stopPlayback()
         player?.release()
         player = null
@@ -345,6 +438,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         _playhead.value = 0f
         _grid.value = BeatGridState()
         _viewport.value = Viewport(1f, 0f)
+        _speed.value = 1f
         tapTimes.clear()
         _state.value = LooperUiState.Loading(displayName)
     }
@@ -500,7 +594,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (newStart != null) start = start.coerceIn(0f, end - minGap)
         if (newEnd != null) end = end.coerceIn(start + minGap, 1f)
         _region.value = LoopRegion(start, end)
-        player?.setRegion(audio.fractionToFrame(start), audio.fractionToFrame(end))
+        // At 1× the player loops the full file, so just move the bounds. When stretched the buffer
+        // holds only the old region, so a region change is picked up by the debounced rebuild below.
+        if (!stretched) player?.setRegion(audio.fractionToFrame(start), audio.fractionToFrame(end))
     }
 
     /** Grid line spacing as a fraction of the file, or 0 if no usable grid. */
@@ -584,22 +680,34 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     /** Move the playhead to a fraction of the file (double-tap seek). */
     fun seek(frac: Float) {
         val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
-        player?.seekTo(audio.fractionToFrame(frac))
-        _playhead.value = frac.coerceIn(0f, 1f)
+        val p = player ?: return
+        if (stretched) {
+            // Map the file fraction into the region-only stretched buffer (clamped to the region).
+            val f = frac.coerceIn(stretchStartFrac, stretchEndFrac)
+            val span = (stretchEndFrac - stretchStartFrac).coerceAtLeast(1e-6f)
+            p.seekTo((((f - stretchStartFrac) / span) * p.frameCount).toInt())
+            _playhead.value = f
+        } else {
+            p.seekTo(audio.fractionToFrame(frac))
+            _playhead.value = frac.coerceIn(0f, 1f)
+        }
     }
 
     private fun startPlayback() {
         val p = player ?: return
         // Playback always begins at the start marker.
         p.rewind()
-        _playhead.value = _region.value.startFrac
+        _playhead.value = if (stretched) stretchStartFrac else _region.value.startFrac
         p.play()
         _isPlaying.value = true
         tickerJob?.cancel()
         tickerJob = viewModelScope.launch {
             val frames = p.frameCount.coerceAtLeast(1)
+            val span = stretchEndFrac - stretchStartFrac
             while (isActive && p.isPlaying) {
-                _playhead.value = p.positionFrame.toFloat() / frames
+                val raw = p.positionFrame.toFloat() / frames
+                // In stretched mode the buffer spans only the region, so map back to a file fraction.
+                _playhead.value = if (stretched) stretchStartFrac + raw * span else raw
                 delay(33)
             }
         }
@@ -640,6 +748,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         flushLoopState()
         loadJob?.cancel()
         detectJob?.cancel()
+        stretchJob?.cancel()
+        _stretching.value = false
+        stretched = false
         stopPlayback()
         player?.release()
         player = null
@@ -671,6 +782,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         tickerJob?.cancel()
         detectJob?.cancel()
+        stretchJob?.cancel()
         // Best-effort final save so a quit within the debounce window doesn't lose the last edit.
         flushLoopState()
         player?.release()

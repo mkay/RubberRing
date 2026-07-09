@@ -146,4 +146,9 @@ class LoopPlayer(
         runCatching { track?.release() }
         track = null
     }
+
+    companion object {
+        const val MIN_SPEED = 0.5f
+        const val MAX_SPEED = 1.5f
+    }
 }
