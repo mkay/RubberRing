@@ -12,7 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
@@ -34,7 +33,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -93,6 +91,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -888,10 +888,6 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 
         Spacer(Modifier.height(8.dp))
 
-        SpeedControl(speed, stretching, viewModel::setSpeed)
-
-        Spacer(Modifier.height(8.dp))
-
         LoopChips(
             loops = loops,
             region = region,
@@ -904,7 +900,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 
         Spacer(Modifier.height(8.dp))
 
-        BeatControls(grid, detecting, viewModel)
+        BeatControls(grid, detecting, speed, stretching, viewModel)
 
         Spacer(Modifier.height(8.dp))
     }
@@ -1028,44 +1024,79 @@ private fun LoopNameDialog(
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Trim a speed to a compact label: 1.00 → "1", 0.80 → "0.8", 0.85 → "0.85". Strips the trailing
+ * decimal separator too — which is locale-dependent (a comma in e.g. German), so trim both.
+ */
+private fun formatSpeed(speed: Float): String =
+    "%.2f".format(speed).trimEnd('0').trimEnd('.', ',')
+
+/**
+ * A compact speed control shown as a text link with a speed icon (e.g. "Speed 0.8×"), tinted
+ * when a slowdown is active. Tap opens a slider popup; long-press resets to 1× — mirroring the
+ * loop chips' tap/long-press idiom. A spinner replaces the icon while a stretch computes.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SpeedControl(speed: Float, stretching: Boolean, onSpeedChange: (Float) -> Unit) {
+private fun SpeedLink(speed: Float, stretching: Boolean, onSpeedChange: (Float) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
     // Track the drag locally and only commit on release — each commit re-runs WSOLA off-thread,
     // so we don't want to fire on every pixel of the drag.
     var dragValue by remember { mutableStateOf<Float?>(null) }
     val shown = dragValue ?: speed
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text("Speed", style = MaterialTheme.typography.labelMedium)
-        Slider(
-            value = shown,
-            onValueChange = { dragValue = it },
-            onValueChangeFinished = { dragValue?.let(onSpeedChange); dragValue = null },
-            valueRange = LoopPlayer.MIN_SPEED..LoopPlayer.MAX_SPEED,
-            steps = 19, // 0.5×..1.5× in 0.05 detents (19 interior stops), so 1.00× is easy to land on
-            modifier = Modifier.weight(1f),
-        )
-        // A spinner while the stretch computes; otherwise the value, tappable to reset to 1×.
-        if (stretching) {
-            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-        } else {
+    val active = speed != 1f
+    val haptic = LocalHapticFeedback.current
+    val tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .combinedClickable(
+                    onClick = { expanded = true },
+                    onLongClick = {
+                        if (active) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSpeedChange(1f)
+                        }
+                    },
+                )
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+        ) {
+            if (stretching) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = tint)
+                Spacer(Modifier.width(6.dp))
+            }
             Text(
-                "%.2f×".format(shown),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier
-                    .widthIn(min = 48.dp)
-                    .clickable { onSpeedChange(1f) },
+                "Speed ${formatSpeed(speed)}×",
+                style = MaterialTheme.typography.labelLarge,
+                color = tint,
+                maxLines = 1,
             )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            Column(Modifier.padding(horizontal = 16.dp).width(220.dp)) {
+                Text("Speed  ${formatSpeed(shown)}×", style = MaterialTheme.typography.labelMedium)
+                Slider(
+                    value = shown,
+                    onValueChange = { dragValue = it },
+                    onValueChangeFinished = { dragValue?.let(onSpeedChange); dragValue = null },
+                    valueRange = LoopPlayer.MIN_SPEED..LoopPlayer.MAX_SPEED,
+                    steps = 19, // 0.5×..1.5× in 0.05 detents, so 1× is easy to land on
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun BeatControls(grid: BeatGridState, detecting: Boolean, viewModel: LooperViewModel) {
+private fun BeatControls(
+    grid: BeatGridState,
+    detecting: Boolean,
+    speed: Float,
+    stretching: Boolean,
+    viewModel: LooperViewModel,
+) {
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1119,11 +1150,21 @@ private fun BeatControls(grid: BeatGridState, detecting: Boolean, viewModel: Loo
             )
         }
 
-        // BPM stepper, centred below the grid controls.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { viewModel.nudgeBpm(-1f) }) { Text("−") }
-            Text("${grid.bpm.roundToInt()} BPM", style = MaterialTheme.typography.titleSmall)
-            TextButton(onClick = { viewModel.nudgeBpm(1f) }) { Text("+") }
+        // Bottom row: BPM stepper and speed control, each centred in its own half.
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { viewModel.nudgeBpm(-1f) }) { Text("−") }
+                    Text("${grid.bpm.roundToInt()} BPM", style = MaterialTheme.typography.titleSmall)
+                    TextButton(onClick = { viewModel.nudgeBpm(1f) }) { Text("+") }
+                }
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                SpeedLink(speed, stretching, viewModel::setSpeed)
+            }
         }
     }
 }
