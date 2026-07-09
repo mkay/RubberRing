@@ -12,6 +12,7 @@ import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.TimeStretch
 import de.singular.looper.audio.WaveformData
+import de.singular.looper.library.ArrangementStep
 import de.singular.looper.library.LibraryRepository
 import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.SavedLoop
@@ -45,6 +46,9 @@ sealed interface LooperUiState {
 
 /** Maximum number of named loops a track may hold. */
 const val MAX_SAVED_LOOPS = 4
+
+/** Maximum number of steps in a practice arrangement. */
+const val MAX_ARRANGEMENT_STEPS = 16
 
 private const val KEY_FOLLOW_PLAYHEAD = "follow_playhead"
 private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
@@ -198,6 +202,22 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private val _savedLoops = MutableStateFlow<List<SavedLoop>>(emptyList())
     val savedLoops: StateFlow<List<SavedLoop>> = _savedLoops.asStateFlow()
 
+    // The open track's practice arrangement, and — while one is playing — the index of the step
+    // currently sounding (null when no arrangement is running).
+    private val _arrangement = MutableStateFlow<List<ArrangementStep>>(emptyList())
+    val arrangement: StateFlow<List<ArrangementStep>> = _arrangement.asStateFlow()
+
+    private val _playingStep = MutableStateFlow<Int?>(null)
+    val playingStep: StateFlow<Int?> = _playingStep.asStateFlow()
+
+    // Whether the Play button runs the arrangement (armed) vs. the single loop, and whether the
+    // sequence repeats from the top. Both persist on the track.
+    private val _arrangementActive = MutableStateFlow(false)
+    val arrangementActive: StateFlow<Boolean> = _arrangementActive.asStateFlow()
+
+    private val _arrangementRepeat = MutableStateFlow(false)
+    val arrangementRepeat: StateFlow<Boolean> = _arrangementRepeat.asStateFlow()
+
     // User preferences that persist across app launches.
     private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
@@ -323,6 +343,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         player = null
         currentTrack = null
         _savedLoops.value = emptyList()
+        _arrangement.value = emptyList()
+        _arrangementActive.value = false
+        _arrangementRepeat.value = false
         _playhead.value = 0f
         _state.value = LooperUiState.Empty
     }
@@ -334,6 +357,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private var tickerJob: Job? = null
     private var detectJob: Job? = null
     private var stretchJob: Job? = null
+    private var arrangementJob: Job? = null
 
     // The library track currently open, if any. Its loop state is kept in sync with the UI.
     private var currentTrack: LibraryTrack? = null
@@ -345,7 +369,8 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             combine(_region, _grid) { r, g -> r to g }
                 .drop(1)
                 .debounce(350)
-                .collect { (r, g) -> saveLoopState(r, g) }
+                // Don't persist the transient region changes the arrangement makes as it advances.
+                .collect { (r, g) -> if (_playingStep.value == null) saveLoopState(r, g) }
         }
         // When stretched, the region defines what gets stretched — re-run WSOLA once the user
         // settles on new markers (debounced so a drag doesn't thrash the analyser).
@@ -391,6 +416,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             finishLoad(result, displayName) { audio ->
                 currentTrack = added
                 _savedLoops.value = added?.savedLoops ?: emptyList()
+                _arrangement.value = added?.arrangement ?: emptyList()
+                _arrangementActive.value = false
+                _arrangementRepeat.value = false
                 detectBeats(audio) // a fresh import: auto-detect the tempo
             }
             refreshLibrary()
@@ -411,6 +439,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             finishLoad(result, opened.name) { audio ->
                 currentTrack = opened
                 _savedLoops.value = opened.savedLoops
+                _arrangement.value = opened.arrangement
+                _arrangementActive.value = opened.arrangementActive
+                _arrangementRepeat.value = opened.arrangementRepeat
                 // Restore the saved viewport only when the user opted in; otherwise start zoomed out.
                 _viewport.value = if (_saveZoom.value) Viewport(opened.zoom, opened.offset)
                 else Viewport(1f, 0f)
@@ -434,6 +465,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         player = null
         currentTrack = null // so resets below don't get auto-saved to the outgoing track
         _savedLoops.value = emptyList()
+        _arrangement.value = emptyList()
+        _arrangementActive.value = false
+        _arrangementRepeat.value = false
         _region.value = LoopRegion(0f, 1f)
         _playhead.value = 0f
         _grid.value = BeatGridState()
@@ -526,7 +560,16 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteLoop(id: String) {
         val track = currentTrack ?: return
-        updateLoops(track.savedLoops.filterNot { it.id == id })
+        // Also drop any arrangement steps that pointed at this loop, so the sequence stays valid.
+        val sorted = track.savedLoops.filterNot { it.id == id }.sortedBy { it.startFrac }
+        val arr = track.arrangement.filterNot { it.loopId == id }
+        val active = if (arr.isEmpty()) false else _arrangementActive.value
+        val updated = track.copy(savedLoops = sorted, arrangement = arr, arrangementActive = active)
+        currentTrack = updated
+        _savedLoops.value = sorted
+        _arrangement.value = arr
+        _arrangementActive.value = active
+        persistTrack(updated)
     }
 
     /** Replace the open track's loop list (sorted in song order) and persist. */
@@ -536,10 +579,66 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         val updated = track.copy(savedLoops = sorted)
         currentTrack = updated
         _savedLoops.value = sorted
+        persistTrack(updated)
+    }
+
+    /** Upsert [track] into the library index off-thread, then refresh the list. */
+    private fun persistTrack(track: LibraryTrack) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { library.add(updated) }
+            withContext(Dispatchers.IO) { library.add(track) }
             refreshLibrary()
         }
+    }
+
+    // ---- Practice arrangement ----
+
+    /** Append a step that plays the saved loop [loopId] (capped at [MAX_ARRANGEMENT_STEPS]). */
+    fun addArrangementStep(loopId: String) {
+        if (_arrangement.value.size >= MAX_ARRANGEMENT_STEPS) return
+        val step = ArrangementStep(UUID.randomUUID().toString(), loopId, 1)
+        updateArrangement(_arrangement.value + step)
+    }
+
+    fun removeArrangementStep(stepId: String) =
+        updateArrangement(_arrangement.value.filterNot { it.stepId == stepId })
+
+    fun setArrangementRepeat(stepId: String, count: Int) =
+        updateArrangement(_arrangement.value.map {
+            if (it.stepId == stepId) it.copy(repeatCount = count.coerceIn(1, 99)) else it
+        })
+
+    /** Move a step up ([delta] = -1) or down ([delta] = +1) in the sequence. */
+    fun moveArrangementStep(stepId: String, delta: Int) {
+        val list = _arrangement.value.toMutableList()
+        val i = list.indexOfFirst { it.stepId == stepId }
+        if (i < 0) return
+        val j = (i + delta).coerceIn(0, list.lastIndex)
+        if (i == j) return
+        list.add(j, list.removeAt(i))
+        updateArrangement(list)
+    }
+
+    /** Arm/disarm the arrangement: when armed, the Play button runs it instead of the single loop. */
+    fun setArrangementActive(active: Boolean) {
+        val track = currentTrack ?: return
+        _arrangementActive.value = active
+        currentTrack = track.copy(arrangementActive = active).also { persistTrack(it) }
+    }
+
+    fun setArrangementRepeatWhole(repeat: Boolean) {
+        val track = currentTrack ?: return
+        _arrangementRepeat.value = repeat
+        currentTrack = track.copy(arrangementRepeat = repeat).also { persistTrack(it) }
+    }
+
+    private fun updateArrangement(steps: List<ArrangementStep>) {
+        val track = currentTrack ?: return
+        // An empty sequence can't be armed, so disarm it to keep the Play button honest.
+        val active = if (steps.isEmpty()) false else _arrangementActive.value
+        _arrangement.value = steps
+        _arrangementActive.value = active
+        currentTrack = track.copy(arrangement = steps, arrangementActive = active)
+            .also { persistTrack(it) }
     }
 
     /** Persist the current loop state onto the open track (debounced from the region/grid flows). */
@@ -695,11 +794,19 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startPlayback() {
         val p = player ?: return
+        // A plain play cancels any running arrangement and loops the single current region.
+        arrangementJob?.cancel()
+        _playingStep.value = null
         // Playback always begins at the start marker.
         p.rewind()
         _playhead.value = if (stretched) stretchStartFrac else _region.value.startFrac
         p.play()
         _isPlaying.value = true
+        launchTicker(p)
+    }
+
+    /** Drive [_playhead] from the player position until it stops. Used by both play modes. */
+    private fun launchTicker(p: LoopPlayer) {
         tickerJob?.cancel()
         tickerJob = viewModelScope.launch {
             val frames = p.frameCount.coerceAtLeast(1)
@@ -714,10 +821,62 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun stopPlayback() {
+        arrangementJob?.cancel()
+        arrangementJob = null
+        _playingStep.value = null
         tickerJob?.cancel()
         tickerJob = null
         player?.pause()
         _isPlaying.value = false
+    }
+
+    /**
+     * Play the saved-loop arrangement: each step's region looped its repeat count, in order, then
+     * stop (or restart if [repeatWhole]). Steps whose loop was deleted are skipped. Runs at 1×
+     * (any active time-stretch is reset first), so playback stays on the simple full-file path.
+     */
+    fun playArrangement() {
+        val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
+        val repeatWhole = _arrangementRepeat.value
+        val byId = _savedLoops.value.associateBy { it.id }
+        val steps = _arrangement.value.mapNotNull { st ->
+            byId[st.loopId]?.let { it to st.repeatCount.coerceAtLeast(1) }
+        }
+        if (steps.isEmpty()) return
+
+        if (_speed.value != 1f) setSpeed(1f) // rebuilds the full-file 1× player (stops playback)
+        val p = player ?: return
+        stopPlayback()
+
+        _isPlaying.value = true
+        arrangementJob = viewModelScope.launch {
+            var index = 0
+            while (isActive) {
+                val (loop, count) = steps[index]
+                _playingStep.value = index
+                val startF = audio.fractionToFrame(loop.startFrac)
+                val endF = audio.fractionToFrame(loop.endFrac).coerceAtLeast(startF + 1)
+                _region.value = LoopRegion(loop.startFrac, loop.endFrac)
+                p.setRegion(startF, endF)
+                p.seekTo(startF)
+                if (!p.isPlaying) { p.play(); launchTicker(p) }
+                // Wait until the seek lands inside the new region, then count its full passes.
+                while (isActive && (p.positionFrame < startF || p.positionFrame >= endF)) delay(10)
+                val base = p.completedLoops
+                while (isActive && p.completedLoops - base < count) delay(20)
+                if (!isActive) break
+                index++
+                if (index >= steps.size) {
+                    if (repeatWhole) index = 0 else break
+                }
+            }
+            if (isActive) { // reached the natural end (not cancelled by Stop)
+                _playingStep.value = null
+                tickerJob?.cancel()
+                player?.pause()
+                _isPlaying.value = false
+            }
+        }
     }
 
     /** Synchronously persist the open track's current loop state (final save on close/clear). */
@@ -756,6 +915,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         player = null
         currentTrack = null
         _savedLoops.value = emptyList()
+        _arrangement.value = emptyList()
+        _arrangementActive.value = false
+        _arrangementRepeat.value = false
         _playhead.value = 0f
         _state.value = LooperUiState.Empty
         refreshLibrary()
@@ -783,6 +945,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         tickerJob?.cancel()
         detectJob?.cancel()
         stretchJob?.cancel()
+        arrangementJob?.cancel()
         // Best-effort final save so a quit within the debounce window doesn't lose the last edit.
         flushLoopState()
         player?.release()

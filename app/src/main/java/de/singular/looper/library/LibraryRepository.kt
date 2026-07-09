@@ -208,6 +208,9 @@ class LibraryRepository(context: Context) {
                     zoom = o.optDouble("zoom", 1.0).toFloat(),
                     offset = o.optDouble("offset", 0.0).toFloat(),
                     savedLoops = readLoops(o.optJSONArray("savedLoops")),
+                    arrangement = readArrangement(o.optJSONArray("arrangement")),
+                    arrangementActive = o.optBoolean("arrangementActive", false),
+                    arrangementRepeat = o.optBoolean("arrangementRepeat", false),
                 )
             }
         }.getOrDefault(emptyList())
@@ -225,6 +228,18 @@ class LibraryRepository(context: Context) {
                 bpm = o.optDouble("bpm", 120.0).toFloat(),
                 downbeatFrac = o.optDouble("downbeatFrac", 0.0).toFloat(),
                 snap = o.optBoolean("snap", false),
+            )
+        }
+    }
+
+    private fun readArrangement(arr: JSONArray?): List<ArrangementStep> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).map { j ->
+            val o = arr.getJSONObject(j)
+            ArrangementStep(
+                stepId = o.getString("stepId"),
+                loopId = o.getString("loopId"),
+                repeatCount = o.optInt("repeatCount", 1),
             )
         }
     }
@@ -248,7 +263,10 @@ class LibraryRepository(context: Context) {
                     .put("snap", t.snap)
                     .put("zoom", t.zoom.toDouble())
                     .put("offset", t.offset.toDouble())
-                    .put("savedLoops", writeLoops(t.savedLoops)),
+                    .put("savedLoops", writeLoops(t.savedLoops))
+                    .put("arrangement", writeArrangement(t.arrangement))
+                    .put("arrangementActive", t.arrangementActive)
+                    .put("arrangementRepeat", t.arrangementRepeat),
             )
         }
         // Write to a temp file then replace, so a crash mid-write can't corrupt the index.
@@ -267,6 +285,19 @@ class LibraryRepository(context: Context) {
                     .put("bpm", l.bpm.toDouble())
                     .put("downbeatFrac", l.downbeatFrac.toDouble())
                     .put("snap", l.snap),
+            )
+        }
+        return arr
+    }
+
+    private fun writeArrangement(steps: List<ArrangementStep>): JSONArray {
+        val arr = JSONArray()
+        steps.forEach { s ->
+            arr.put(
+                JSONObject()
+                    .put("stepId", s.stepId)
+                    .put("loopId", s.loopId)
+                    .put("repeatCount", s.repeatCount),
             )
         }
         return arr

@@ -29,6 +29,13 @@ class LoopPlayer(
     @Volatile var positionFrame: Int = 0
         private set
 
+    /**
+     * How many times playback has wrapped from the region end back to the start since [play].
+     * Monotonic; the arrangement sequencer watches the delta to know when a step's repeats are done.
+     */
+    @Volatile var completedLoops: Int = 0
+        private set
+
     /** A pending seek target, picked up by the feeder on its next iteration (-1 = none). */
     @Volatile private var pendingSeek: Int = -1
 
@@ -79,6 +86,7 @@ class LoopPlayer(
         if (positionFrame < loopStartFrame || positionFrame >= loopEndFrame) {
             positionFrame = loopStartFrame
         }
+        completedLoops = 0
 
         running = true
         t.play()
@@ -106,7 +114,7 @@ class LoopPlayer(
             if (written > 0) {
                 val framesWritten = written / channels // request is frame-aligned
                 frame += framesWritten
-                if (frame >= end) frame = start
+                if (frame >= end) { frame = start; completedLoops++ } // a full pass of the region
                 positionFrame = frame
             } else {
                 // Output buffer full — wait briefly, keeping pause latency low.

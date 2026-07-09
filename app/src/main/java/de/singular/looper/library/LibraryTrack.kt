@@ -17,6 +17,7 @@ package de.singular.looper.library
  * when the track is reopened. Defaults describe a fresh track: the whole file, grid off.
  * [zoom]/[offset] are the last waveform viewport, saved on exit only when the user opts in.
  * [savedLoops] are the user's explicitly named practice loops for this track.
+ * [arrangement] is an ordered practice sequence built from those loops (see [ArrangementStep]).
  */
 data class LibraryTrack(
     val id: String,
@@ -34,6 +35,11 @@ data class LibraryTrack(
     val zoom: Float = 1f,
     val offset: Float = 0f,
     val savedLoops: List<SavedLoop> = emptyList(),
+    val arrangement: List<ArrangementStep> = emptyList(),
+    // Whether the Play button runs the arrangement (armed) rather than the single loop, and
+    // whether that arrangement repeats from the top or stops after the last step.
+    val arrangementActive: Boolean = false,
+    val arrangementRepeat: Boolean = false,
 ) {
     /** The name to show the user: the chosen [title] if set, otherwise the original file name. */
     val name: String get() = title?.takeIf { it.isNotBlank() } ?: displayName

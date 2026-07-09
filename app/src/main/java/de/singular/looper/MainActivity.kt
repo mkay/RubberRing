@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +31,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,12 +49,17 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -107,6 +114,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.library.LibraryTrack
+import de.singular.looper.library.ArrangementStep
 import de.singular.looper.library.SavedLoop
 import de.singular.looper.ui.LoopWaveform
 import kotlinx.coroutines.launch
@@ -857,9 +865,13 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val detecting by viewModel.detecting.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val loops by viewModel.savedLoops.collectAsStateWithLifecycle()
+    val arrangement by viewModel.arrangement.collectAsStateWithLifecycle()
+    val arrangementActive by viewModel.arrangementActive.collectAsStateWithLifecycle()
+    val arrangementRepeat by viewModel.arrangementRepeat.collectAsStateWithLifecycle()
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
     val speed by viewModel.speed.collectAsStateWithLifecycle()
     val stretching by viewModel.stretching.collectAsStateWithLifecycle()
+    var showArrange by remember { mutableStateOf(false) }
     val durationMs = audio.durationMs
 
     val intervalFrac = if (grid.bpm > 0f && durationMs > 0)
@@ -907,8 +919,16 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 
         Spacer(Modifier.height(8.dp))
 
+        // When the arrangement is armed and has playable steps, the Play button runs the sequence.
+        val arrangeMode = arrangementActive && arrangement.any { st -> loops.any { it.id == st.loopId } }
         Button(
-            onClick = viewModel::togglePlay,
+            onClick = {
+                when {
+                    isPlaying -> viewModel.togglePlay() // stop (also cancels an arrangement)
+                    arrangeMode -> viewModel.playArrangement()
+                    else -> viewModel.togglePlay() // start the single loop
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             shape = ControlShape,
         ) {
@@ -917,7 +937,13 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
                 contentDescription = null,
             )
             Spacer(Modifier.width(8.dp))
-            Text(if (isPlaying) "Stop" else "Play")
+            Text(
+                when {
+                    isPlaying -> "Stop"
+                    arrangeMode -> "Play arrangement"
+                    else -> "Play"
+                },
+            )
         }
 
         Spacer(Modifier.height(8.dp))
@@ -926,6 +952,9 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             loops = loops,
             region = region,
             canAdd = loops.size < MAX_SAVED_LOOPS,
+            canArrange = loops.isNotEmpty(),
+            arrangeActive = arrangementActive,
+            onArrange = { showArrange = true },
             onApply = viewModel::applySavedLoop,
             onSave = viewModel::saveCurrentLoop,
             onRename = viewModel::renameLoop,
@@ -938,6 +967,22 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 
         Spacer(Modifier.height(8.dp))
     }
+
+    if (showArrange) {
+        ArrangeDialog(
+            steps = arrangement,
+            loops = loops,
+            active = arrangementActive,
+            repeatWhole = arrangementRepeat,
+            onAddStep = viewModel::addArrangementStep,
+            onRemoveStep = viewModel::removeArrangementStep,
+            onMoveStep = viewModel::moveArrangementStep,
+            onSetRepeat = viewModel::setArrangementRepeat,
+            onToggleActive = viewModel::setArrangementActive,
+            onToggleRepeatWhole = viewModel::setArrangementRepeatWhole,
+            onDismiss = { showArrange = false },
+        )
+    }
 }
 
 @Composable
@@ -945,6 +990,9 @@ private fun LoopChips(
     loops: List<SavedLoop>,
     region: LoopRegion,
     canAdd: Boolean,
+    canArrange: Boolean,
+    arrangeActive: Boolean,
+    onArrange: () -> Unit,
     onApply: (SavedLoop) -> Unit,
     onSave: (String) -> Unit,
     onRename: (String, String) -> Unit,
@@ -954,28 +1002,48 @@ private fun LoopChips(
     var renameTarget by remember { mutableStateOf<SavedLoop?>(null) }
 
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        loops.forEach { loop ->
-            // Highlight the loop whose span matches the current markers.
-            val selected = abs(loop.startFrac - region.startFrac) < 1e-3f &&
-                abs(loop.endFrac - region.endFrac) < 1e-3f
-            LoopChip(
-                loop = loop,
-                selected = selected,
-                onApply = { onApply(loop) },
-                onRename = { renameTarget = loop },
-                onDelete = { onDelete(loop.id) },
-            )
+        // Chips take the remaining width and scroll sideways within it…
+        Row(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            loops.forEach { loop ->
+                // Highlight the loop whose span matches the current markers.
+                val selected = abs(loop.startFrac - region.startFrac) < 1e-3f &&
+                    abs(loop.endFrac - region.endFrac) < 1e-3f
+                LoopChip(
+                    loop = loop,
+                    selected = selected,
+                    onApply = { onApply(loop) },
+                    onRename = { renameTarget = loop },
+                    onDelete = { onDelete(loop.id) },
+                )
+            }
+            if (canAdd) {
+                AssistChip(
+                    onClick = { showSaveDialog = true },
+                    label = { Text("＋ Save") },
+                    shape = ControlShape,
+                )
+            }
         }
-        if (canAdd) {
-            AssistChip(
-                onClick = { showSaveDialog = true },
-                label = { Text("＋ Save") },
-                shape = ControlShape,
-            )
+        // …the Arrange action stays pinned as an icon-only button so it can't scroll out of reach
+        // and takes minimal width. Its icon turns brand-red while the arrangement is armed
+        // (matching the "Play arrangement" button); white otherwise.
+        if (canArrange) {
+            IconButton(onClick = onArrange) {
+                Icon(
+                    Icons.Default.AutoFixHigh,
+                    contentDescription = "Arrange",
+                    tint = if (arrangeActive) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
     }
 
@@ -995,6 +1063,106 @@ private fun LoopChips(
             onDismiss = { renameTarget = null },
         )
     }
+}
+
+/**
+ * The practice-arrangement editor: an ordered list of steps (each a saved loop played N times),
+ * a palette of saved loops to append from, and a Play that runs the sequence. The same loop may
+ * appear in several steps, so a step is removed by its own position, not by deleting the loop.
+ */
+@Composable
+private fun ArrangeDialog(
+    steps: List<ArrangementStep>,
+    loops: List<SavedLoop>,
+    active: Boolean,
+    repeatWhole: Boolean,
+    onAddStep: (String) -> Unit,
+    onRemoveStep: (String) -> Unit,
+    onMoveStep: (String, Int) -> Unit,
+    onSetRepeat: (String, Int) -> Unit,
+    onToggleActive: (Boolean) -> Unit,
+    onToggleRepeatWhole: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val nameById = remember(loops) { loops.associate { it.id to it.label } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Arrange") },
+        text = {
+            Column {
+                if (steps.isEmpty()) {
+                    Text(
+                        "Add saved loops below to build a practice sequence.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                        steps.forEachIndexed { i, step ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column {
+                                    IconButton(
+                                        onClick = { onMoveStep(step.stepId, -1) },
+                                        enabled = i > 0,
+                                        modifier = Modifier.size(28.dp),
+                                    ) { Icon(Icons.Default.KeyboardArrowUp, "Move up") }
+                                    IconButton(
+                                        onClick = { onMoveStep(step.stepId, 1) },
+                                        enabled = i < steps.lastIndex,
+                                        modifier = Modifier.size(28.dp),
+                                    ) { Icon(Icons.Default.KeyboardArrowDown, "Move down") }
+                                }
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    nameById[step.loopId] ?: "(deleted)",
+                                    Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount - 1) }) { Text("−") }
+                                Text("×${step.repeatCount}", style = MaterialTheme.typography.titleSmall)
+                                TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount + 1) }) { Text("+") }
+                                IconButton(onClick = { onRemoveStep(step.stepId) }) {
+                                    Icon(Icons.Default.Close, "Remove step")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Text("Add step", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    loops.forEach { loop ->
+                        AssistChip(
+                            onClick = { onAddStep(loop.id) },
+                            enabled = steps.size < MAX_ARRANGEMENT_STEPS,
+                            label = { Text(loop.label, maxLines = 1) },
+                            shape = ControlShape,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = repeatWhole, onCheckedChange = onToggleRepeatWhole)
+                    Text("Repeat whole sequence")
+                }
+                // Arming the arrangement makes the main Play button run it instead of the single loop.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = active,
+                        onCheckedChange = onToggleActive,
+                        enabled = steps.isNotEmpty(),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Play as arrangement")
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
