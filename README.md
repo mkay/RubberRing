@@ -3,7 +3,7 @@
   RubberRing
 </h1>
 
-An Android tool for practicing song parts. Pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop. RubberRing auto-detects (to some extend) tempo and beats to snap the loop markers to a beat grid, with full manual override.
+An Android tool for practicing song parts. Pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop — slowed down without changing pitch, and snapped to an editable beat grid. Chain loops into practice arrangements to drill transitions.
 
 Early-stage release — everything should work as advertised; beat detection needs improvement. Feedback and bug reports welcome via Issues.
 
@@ -13,27 +13,22 @@ Early-stage release — everything should work as advertised; beat detection nee
 
 ## Features
 
-- **Import-and-own library** — picked files are copied into app-private storage, so
-  loops never break when the original is moved, renamed, or deleted.
-- **Waveform region selection** — drag start/stop handles to mark the section to loop.
-- **Gapless looping** — the selected region is decoded to PCM and looped via
-  `AudioTrack` loop points, so the boundary wraps with zero audible gap or click.
-- **Automatic beat grid** — a dependency-free tempo estimator (onset-flux
-  autocorrelation with a comb filter) finds BPM and a downbeat; the grid is always
-  hand-editable.
-- **Snap to grid** — drag handles snap to the quarter-note beat grid.
-- **Downbeat = start** — re-anchors the grid so a beat line falls exactly on the
-  current loop-start marker. Auto-detect usually nails the tempo but can be a fraction
-  of a beat off in phase; put the start handle on a beat and tap this to lock the whole
-  grid to it.
-- **Saved loops** — capture a region + grid per track and restore it later; each library
-  entry shows its saved-loop count.
-- **Custom track titles** — rename any library entry to a friendlier name; the original file
-  name is preserved and shown faded alongside it.
-- **Follow playhead** — auto-scrolls the zoomed waveform to keep the moving playhead in view.
-- **Keep screen on** — optional toggle to stop the display sleeping during a practice session.
-- **Quick help** — an in-app cheat sheet for moving markers and the playhead, zooming, and
-  saving/recalling loops. Preferences persist across launches.
+- **Import-and-own library** — picked files are copied into app-private storage, so loops
+  survive the original being moved or deleted. The library doubles as the home screen, with
+  recents and custom, renameable track titles.
+- **Waveform loop editing** — drag start/end handles to mark a section; it decodes to PCM and
+  loops via `AudioTrack` loop points, so the boundary wraps with zero audible gap or click.
+- **Editable beat grid** — a dependency-free estimator finds BPM and a downbeat, and handles
+  snap to the grid. Refine it by hand: tap the tempo, nudge ±1 BPM, or halve/double to fix
+  the octave errors auto-detect is prone to.
+- **Pitch-preserving speed** — slow down or speed up from 0.5× to 1.5× with a WSOLA
+  time-stretch that keeps the original pitch.
+- **Saved loops** — capture a region + grid per track and recall it later.
+- **Practice arrangements** — chain saved loops into an ordered sequence, each repeated a set
+  number of times and optionally looping the whole set — for drilling A–B–A transitions.
+- **Session comforts** — System/Light/Dark themes with a theme-aware waveform, follow-playhead
+  auto-scroll, keep-screen-on, library backup & restore, and an in-app quick-help sheet.
+  Preferences persist across launches.
 
 ## Tech stack
 
@@ -43,7 +38,7 @@ Early-stage release — everything should work as advertised; beat detection nee
 - **SDK:** `minSdk` 26 · `compile`/`targetSdk` 36
 - **Decode:** `MediaExtractor` + `MediaCodec` → PCM
 - **Playback:** low-level `AudioTrack` with sample-accurate loop points
-- **Beat detection:** custom, no native/NDK or GPL dependencies
+- **Beat detection & time-stretch:** custom (WSOLA), no native/NDK or GPL dependencies
 - **Async:** Kotlin Coroutines + Flow
 
 ## Building
@@ -74,10 +69,11 @@ app/src/main/java/de/singular/looper/
     AudioDecoder.kt      file URI -> PCM + metadata
     LoopPlayer.kt        AudioTrack wrapper: loop points, play/pause/seek
     BeatDetector.kt      tempo + downbeat estimation
+    TimeStretch.kt       pitch-preserving WSOLA speed change
     DecodedAudio.kt / WaveformData.kt   PCM + envelope models
   library/
     LibraryRepository.kt import-and-own storage + metadata index
-    LibraryTrack.kt / SavedLoop.kt
+    LibraryTrack.kt / SavedLoop.kt / ArrangementStep.kt
   ui/
     LoopWaveform.kt      waveform + grid + handle rendering
 ```
