@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,7 +50,6 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -59,7 +59,6 @@ import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -96,6 +95,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -138,6 +138,9 @@ private val LooperLightColors = lightColorScheme(
 
 // Controls use a gentle 5px corner rather than the fully-rounded Material default.
 private val ControlShape = RoundedCornerShape(5.dp)
+
+/** Dim factor for controls locked out while an arrangement is enabled. */
+private const val LOCKED_ALPHA = 0.4f
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -874,6 +877,16 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     var showArrange by remember { mutableStateOf(false) }
     val durationMs = audio.durationMs
 
+    // Once the arrangement is enabled, the Play button runs the sequence — so the single-loop and
+    // grid controls no longer affect what you hear and would only confuse. Dim them for as long as
+    // the arrangement is armed; a tap explains why instead of acting. Turn Arrange off to regain them.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // The Arrange button is icon-only (the three-dot "steppers" glyph), so the notice echoes it as
+    // "•••" to point at the right control. A real icon can't render in a toast on modern Android.
+    val notifyLocked: () -> Unit = {
+        Toast.makeText(context, "Turn off Arrange (•••) to use this", Toast.LENGTH_SHORT).show()
+    }
+
     val intervalFrac = if (grid.bpm > 0f && durationMs > 0)
         ((60_000.0 / grid.bpm / grid.subdivision) / durationMs).toFloat() else 0f
 
@@ -954,6 +967,8 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             canAdd = loops.size < MAX_SAVED_LOOPS,
             canArrange = loops.isNotEmpty(),
             arrangeActive = arrangementActive,
+            locked = arrangementActive,
+            onLocked = notifyLocked,
             onArrange = { showArrange = true },
             onApply = viewModel::applySavedLoop,
             onSave = viewModel::saveCurrentLoop,
@@ -963,7 +978,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 
         Spacer(Modifier.height(8.dp))
 
-        BeatControls(grid, detecting, speed, stretching, viewModel)
+        BeatControls(grid, detecting, speed, stretching, arrangementActive, notifyLocked, viewModel)
 
         Spacer(Modifier.height(8.dp))
     }
@@ -992,6 +1007,8 @@ private fun LoopChips(
     canAdd: Boolean,
     canArrange: Boolean,
     arrangeActive: Boolean,
+    locked: Boolean,
+    onLocked: () -> Unit,
     onArrange: () -> Unit,
     onApply: (SavedLoop) -> Unit,
     onSave: (String) -> Unit,
@@ -1019,6 +1036,8 @@ private fun LoopChips(
                 LoopChip(
                     loop = loop,
                     selected = selected,
+                    locked = locked,
+                    onLocked = onLocked,
                     onApply = { onApply(loop) },
                     onRename = { renameTarget = loop },
                     onDelete = { onDelete(loop.id) },
@@ -1026,23 +1045,31 @@ private fun LoopChips(
             }
             if (canAdd) {
                 AssistChip(
-                    onClick = { showSaveDialog = true },
+                    onClick = { if (locked) onLocked() else showSaveDialog = true },
                     label = { Text("＋ Save") },
                     shape = ControlShape,
+                    modifier = Modifier.alpha(if (locked) LOCKED_ALPHA else 1f),
                 )
             }
         }
         // …the Arrange action stays pinned as an icon-only button so it can't scroll out of reach
-        // and takes minimal width. Its icon turns brand-red while the arrangement is armed
-        // (matching the "Play arrangement" button); white otherwise.
+        // and takes minimal width. While the arrangement is armed it fills brand-red with a white
+        // icon (like an active loop chip); otherwise it's a plain icon on no background.
         if (canArrange) {
-            IconButton(onClick = onArrange) {
-                Icon(
-                    Icons.Default.AutoFixHigh,
-                    contentDescription = "Arrange",
-                    tint = if (arrangeActive) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface,
-                )
+            Surface(
+                onClick = onArrange,
+                shape = ControlShape,
+                color = if (arrangeActive) MaterialTheme.colorScheme.primary else Color.Transparent,
+                contentColor = if (arrangeActive) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurface,
+            ) {
+                // Match the chip height (32dp) so it lines up with the loop/save chips beside it.
+                Box(
+                    Modifier.height(32.dp).padding(horizontal = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(painterResource(R.drawable.ic_steppers), contentDescription = "Arrange")
+                }
             }
         }
     }
@@ -1088,7 +1115,30 @@ private fun ArrangeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Arrange") },
+        title = {
+            // Arming the arrangement makes the main Play button run it instead of the single loop.
+            // It lives beside the title as a compact "enabled" toggle.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Arrange")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "enabled",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = active,
+                        onCheckedChange = onToggleActive,
+                        enabled = steps.isNotEmpty(),
+                    )
+                }
+            }
+        },
         text = {
             Column {
                 if (steps.isEmpty()) {
@@ -1098,9 +1148,18 @@ private fun ArrangeDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                    Column(
+                        Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         steps.forEachIndexed { i, step ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(ControlShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                            ) {
                                 Column {
                                     IconButton(
                                         onClick = { onMoveStep(step.stepId, -1) },
@@ -1146,18 +1205,9 @@ private fun ArrangeDialog(
 
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = repeatWhole, onCheckedChange = onToggleRepeatWhole)
-                    Text("Repeat whole sequence")
-                }
-                // Arming the arrangement makes the main Play button run it instead of the single loop.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = active,
-                        onCheckedChange = onToggleActive,
-                        enabled = steps.isNotEmpty(),
-                    )
+                    Switch(checked = repeatWhole, onCheckedChange = onToggleRepeatWhole)
                     Spacer(Modifier.width(8.dp))
-                    Text("Play as arrangement")
+                    Text("Repeat whole sequence")
                 }
             }
         },
@@ -1170,6 +1220,8 @@ private fun ArrangeDialog(
 private fun LoopChip(
     loop: SavedLoop,
     selected: Boolean,
+    locked: Boolean,
+    onLocked: () -> Unit,
     onApply: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
@@ -1180,12 +1232,17 @@ private fun LoopChip(
     else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
     else MaterialTheme.colorScheme.onSurfaceVariant
-    Box {
+    Box(Modifier.alpha(if (locked) LOCKED_ALPHA else 1f)) {
         Surface(
             shape = ControlShape,
             color = bg,
             contentColor = fg,
-            modifier = Modifier.combinedClickable(onClick = onApply, onLongClick = { menu = true }),
+            // While the arrangement is armed, both tap and long-press just explain why rather than
+            // applying/editing a loop that no longer affects what the Play button plays.
+            modifier = Modifier.combinedClickable(
+                onClick = { if (locked) onLocked() else onApply() },
+                onLongClick = { if (locked) onLocked() else menu = true },
+            ),
         ) {
             Text(
                 loop.label,
@@ -1240,7 +1297,13 @@ private fun formatSpeed(speed: Float): String =
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SpeedLink(speed: Float, stretching: Boolean, onSpeedChange: (Float) -> Unit) {
+private fun SpeedLink(
+    speed: Float,
+    stretching: Boolean,
+    locked: Boolean,
+    onLocked: () -> Unit,
+    onSpeedChange: (Float) -> Unit,
+) {
     var expanded by remember { mutableStateOf(false) }
     // Track the drag locally and only commit on release — each commit re-runs WSOLA off-thread,
     // so we don't want to fire on every pixel of the drag.
@@ -1250,14 +1313,16 @@ private fun SpeedLink(speed: Float, stretching: Boolean, onSpeedChange: (Float) 
     val haptic = LocalHapticFeedback.current
     val tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
 
-    Box {
+    Box(Modifier.alpha(if (locked) LOCKED_ALPHA else 1f)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .combinedClickable(
-                    onClick = { expanded = true },
+                    // Speed doesn't affect arrangement playback, so lock it while Arrange is armed.
+                    onClick = { if (locked) onLocked() else expanded = true },
                     onLongClick = {
-                        if (active) {
+                        if (locked) onLocked()
+                        else if (active) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onSpeedChange(1f)
                         }
@@ -1297,8 +1362,13 @@ private fun BeatControls(
     detecting: Boolean,
     speed: Float,
     stretching: Boolean,
+    locked: Boolean,
+    onLocked: () -> Unit,
     viewModel: LooperViewModel,
 ) {
+    // With the arrangement armed, the Play button runs the sequence, so these grid/tempo controls no
+    // longer change what's heard — dim them while it's enabled and let a tap explain why.
+    val dim = Modifier.alpha(if (locked) LOCKED_ALPHA else 1f)
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1313,42 +1383,47 @@ private fun BeatControls(
             // chips keeps the grid controls reading as one tidy row.
             FilterChip(
                 selected = grid.enabled,
-                onClick = { viewModel.toggleSnap() },
+                onClick = { if (locked) onLocked() else viewModel.toggleSnap() },
                 label = { Text("Snap") },
                 shape = ControlShape,
+                modifier = dim,
             )
 
             FilterChip(
                 selected = false,
                 enabled = !detecting,
-                onClick = { viewModel.detectBeats() },
+                onClick = { if (locked) onLocked() else viewModel.detectBeats() },
                 label = { Text("Auto") },
                 leadingIcon = if (detecting) {
                     { CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) }
                 } else null,
                 shape = ControlShape,
+                modifier = dim,
             )
 
             FilterChip(
                 selected = false,
-                onClick = { viewModel.tapTempo() },
+                onClick = { if (locked) onLocked() else viewModel.tapTempo() },
                 label = { Text("Tap") },
                 shape = ControlShape,
+                modifier = dim,
             )
 
             // Octave fix: auto-detect most often errs by a factor of two, which ±1 nudges can't
             // reach — one tap halves or doubles the tempo instead.
             FilterChip(
                 selected = false,
-                onClick = { viewModel.halveTempo() },
+                onClick = { if (locked) onLocked() else viewModel.halveTempo() },
                 label = { Text("½×") },
                 shape = ControlShape,
+                modifier = dim,
             )
             FilterChip(
                 selected = false,
-                onClick = { viewModel.doubleTempo() },
+                onClick = { if (locked) onLocked() else viewModel.doubleTempo() },
                 label = { Text("2×") },
                 shape = ControlShape,
+                modifier = dim,
             )
         }
 
@@ -1358,14 +1433,14 @@ private fun BeatControls(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { viewModel.nudgeBpm(-1f) }) { Text("−") }
+                Row(dim, verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { if (locked) onLocked() else viewModel.nudgeBpm(-1f) }) { Text("−") }
                     Text("${grid.bpm.roundToInt()} BPM", style = MaterialTheme.typography.titleSmall)
-                    TextButton(onClick = { viewModel.nudgeBpm(1f) }) { Text("+") }
+                    TextButton(onClick = { if (locked) onLocked() else viewModel.nudgeBpm(1f) }) { Text("+") }
                 }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                SpeedLink(speed, stretching, viewModel::setSpeed)
+                SpeedLink(speed, stretching, locked, onLocked, viewModel::setSpeed)
             }
         }
     }
