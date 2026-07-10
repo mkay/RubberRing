@@ -1,0 +1,4 @@
+• Slow down or speed up playback (0.5×–1.5×) without changing pitch
+• Practice arrangements: chain your saved loops into a sequence, each repeated as many times as you like
+• A screen-kept-on indicator in the app bar
+• Various refinements to the loop and arrangement controls
