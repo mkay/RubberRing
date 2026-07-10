@@ -26,8 +26,7 @@ Early-stage release — everything should work as advertised; beat detection nee
 - **Saved loops** — capture a region + grid per track and recall it later.
 - **Practice arrangements** — chain saved loops into an ordered sequence, each repeated a set
   number of times and optionally looping the whole set — for drilling A–B–A transitions.
-- **Session comforts** — System/Light/Dark themes with a theme-aware waveform, follow-playhead
-  auto-scroll, keep-screen-on, library backup & restore, and an in-app quick-help sheet.
+- **Session comforts** — System/Light/Dark themes with a theme-aware waveform, follow-playhead auto-scroll, keep-screen-on, library backup & restore, and an in-app quick-help sheet.
   Preferences persist across launches.
 
 ## Tech stack
