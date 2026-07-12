@@ -1485,12 +1485,12 @@ private fun BeatControls(
                         )
                         DropdownMenu(expanded = octaveMenu, onDismissRequest = { octaveMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text("Halve tempo") },
-                                onClick = { viewModel.halveTempo(); octaveMenu = false },
-                            )
-                            DropdownMenuItem(
                                 text = { Text("Double tempo") },
                                 onClick = { viewModel.doubleTempo(); octaveMenu = false },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Halve tempo") },
+                                onClick = { viewModel.halveTempo(); octaveMenu = false },
                             )
                         }
                     }
