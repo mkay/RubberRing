@@ -77,6 +77,11 @@ app/src/main/java/de/singular/looper/
     LoopWaveform.kt      waveform + grid + handle rendering
 ```
 
+## Support
+
+If Rubber Ring is useful to you, you can support its development on
+[Ko-fi](https://ko-fi.com/s1ngular). Thank you!
+
 ## Disclaimer
 
 This project was developed with the assistance of Claude under my direction and functional review. The code has been analysed with Codacy (detekt).
