@@ -1,27 +1,16 @@
-Rubber Ring is a tool for practicing song parts. Pick an audio file, mark a
-start/stop region on its waveform, and play it back in a seamless, gapless loop.
-It auto-detects (to some extent) tempo and beats to snap the loop markers to a
-beat grid, with full manual override.
+Rubber Ring is a tool for practicing song parts. Pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop. It auto-detects tempo and beats to snap the loop markers to a beat grid, with full manual override.
 
 Alpha software: early access, expect rough edges.
 
 Features:
 
-* Import-and-own library — picked files are copied into app-private storage, so
-  loops never break when the original is moved, renamed, or deleted.
-* Waveform region selection — drag start/stop handles to mark the section to loop.
-* Gapless looping — the region is decoded to PCM and looped via AudioTrack loop
-  points, so the boundary wraps with zero audible gap or click.
-* Automatic beat grid — a dependency-free tempo estimator finds BPM and a
-  downbeat; the grid is always hand-editable.
-* Snap to grid — drag handles snap to the quarter-note beat grid.
-* Saved loops — capture a region and grid per track and restore it later.
-* Custom track titles — rename any library entry to a friendlier name.
-* Recent tracks — quickly reopen what you were just working on.
-* Backup & restore — export your whole library (tracks and saved loops) to a
-  file and restore it after a reinstall or on another device.
-* Light & dark themes — follow the system, or force light or dark.
-* Follow playhead — auto-scrolls the zoomed waveform to keep the playhead in view.
-* Keep screen on — optional toggle to stop the display sleeping while practicing.
+* Import-and-own library — picked files are copied into app-private storage, so loops never break when the original is moved, renamed, or deleted.
+* Waveform region selection with gapless looping — drag start/stop handles to mark a section; the loop boundary wraps with zero audible gap or click.
+* Automatic, hand-editable beat grid — a dependency-free estimator finds BPM and a downbeat, and handles snap to the beat grid.
+* Adjustable playback speed — slow a tricky passage down (or speed it up) without changing pitch.
+* Count-in — long-press Play to start after a metronome counts you in at the track's tempo.
+* Saved loops and practice arrangements — capture named sections per track and chain them into a sequence, each repeated as many times as you set.
+* Backup & restore — export your whole library (tracks and saved loops) to a file and restore it after a reinstall or on another device.
+* Light & dark themes, follow-playhead scrolling, and a recents list.
 
 No ads, no trackers, no network access.
