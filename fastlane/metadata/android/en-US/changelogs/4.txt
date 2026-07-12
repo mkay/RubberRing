@@ -1,0 +1,1 @@
+• Maintenance release so F-Droid can reproduce and publish the 0.3 features (pitch-preserving speed control and practice arrangements). No functional changes since 0.3.
