@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
@@ -69,15 +70,18 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -874,17 +878,20 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
     val speed by viewModel.speed.collectAsStateWithLifecycle()
     val stretching by viewModel.stretching.collectAsStateWithLifecycle()
+    val countIn by viewModel.countIn.collectAsStateWithLifecycle()
+    val countingIn by viewModel.countingIn.collectAsStateWithLifecycle()
     var showArrange by remember { mutableStateOf(false) }
+    var showOptions by remember { mutableStateOf(false) }
     val durationMs = audio.durationMs
 
     // Once the arrangement is enabled, the Play button runs the sequence — so the single-loop and
     // grid controls no longer affect what you hear and would only confuse. Dim them for as long as
     // the arrangement is armed; a tap explains why instead of acting. Turn Arrange off to regain them.
     val context = androidx.compose.ui.platform.LocalContext.current
-    // The Arrange button is icon-only (the three-dot "steppers" glyph), so the notice echoes it as
-    // "•••" to point at the right control. A real icon can't render in a toast on modern Android.
+    // The Arrange button is icon-only (a numbered-list glyph), so the notice names it in words —
+    // a real icon can't render in a toast on modern Android.
     val notifyLocked: () -> Unit = {
-        Toast.makeText(context, "Turn off Arrange (•••) to use this", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Turn off Arrange to use this", Toast.LENGTH_SHORT).show()
     }
 
     val intervalFrac = if (grid.bpm > 0f && durationMs > 0)
@@ -934,29 +941,49 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 
         // When the arrangement is armed and has playable steps, the Play button runs the sequence.
         val arrangeMode = arrangementActive && arrangement.any { st -> loops.any { it.id == st.loopId } }
-        Button(
-            onClick = {
-                when {
-                    isPlaying -> viewModel.togglePlay() // stop (also cancels an arrangement)
-                    arrangeMode -> viewModel.playArrangement()
-                    else -> viewModel.togglePlay() // start the single loop
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = ControlShape,
+        val haptics = LocalHapticFeedback.current
+        // Full-width play control: tap starts plainly; a long-press starts with the count-in.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(ControlShape)
+                .background(MaterialTheme.colorScheme.primary)
+                .combinedClickable(
+                    onClick = {
+                        when {
+                            isPlaying -> viewModel.togglePlay() // stop (also cancels an arrangement)
+                            arrangeMode -> viewModel.playArrangement()
+                            else -> viewModel.togglePlay() // start the single loop
+                        }
+                    },
+                    onLongClick = {
+                        if (!isPlaying) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (arrangeMode) viewModel.playArrangement(withCountIn = true)
+                            else viewModel.togglePlay(withCountIn = true)
+                        }
+                    },
+                )
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                contentDescription = null,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                when {
-                    isPlaying -> "Stop"
-                    arrangeMode -> "Play arrangement"
-                    else -> "Play"
-                },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    when {
+                        countingIn -> "Counting in…"
+                        isPlaying -> "Stop"
+                        arrangeMode -> "Play arrangement"
+                        else -> "Play"
+                    },
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -978,13 +1005,13 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 
         Spacer(Modifier.height(8.dp))
 
-        BeatControls(grid, detecting, speed, stretching, arrangementActive, notifyLocked, viewModel)
+        BeatControls(grid, detecting, speed, stretching, arrangementActive, notifyLocked, { showOptions = true }, viewModel)
 
         Spacer(Modifier.height(8.dp))
     }
 
     if (showArrange) {
-        ArrangeDialog(
+        ArrangeSheet(
             steps = arrangement,
             loops = loops,
             active = arrangementActive,
@@ -996,6 +1023,15 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             onToggleActive = viewModel::setArrangementActive,
             onToggleRepeatWhole = viewModel::setArrangementRepeatWhole,
             onDismiss = { showArrange = false },
+        )
+    }
+
+    if (showOptions) {
+        OptionsSheet(
+            countIn = countIn,
+            bpm = grid.bpm,
+            onSetCountIn = viewModel::setCountIn,
+            onDismiss = { showOptions = false },
         )
     }
 }
@@ -1068,7 +1104,7 @@ private fun LoopChips(
                     Modifier.height(32.dp).padding(horizontal = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(painterResource(R.drawable.ic_steppers), contentDescription = "Arrange")
+                    Icon(Icons.Filled.FormatListNumbered, contentDescription = "Arrange")
                 }
             }
         }
@@ -1097,8 +1133,9 @@ private fun LoopChips(
  * a palette of saved loops to append from, and a Play that runs the sequence. The same loop may
  * appear in several steps, so a step is removed by its own position, not by deleting the loop.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ArrangeDialog(
+private fun ArrangeSheet(
     steps: List<ArrangementStep>,
     loops: List<SavedLoop>,
     active: Boolean,
@@ -1113,17 +1150,22 @@ private fun ArrangeDialog(
 ) {
     val nameById = remember(loops) { loops.associate { it.id to it.label } }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             // Arming the arrangement makes the main Play button run it instead of the single loop.
-            // It lives beside the title as a compact "enabled" toggle.
+            // The toggle lives beside the header as a compact "enabled" switch.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Arrange")
+                Text("Arrange", style = MaterialTheme.typography.titleLarge)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "enabled",
@@ -1138,81 +1180,75 @@ private fun ArrangeDialog(
                     )
                 }
             }
-        },
-        text = {
-            Column {
-                if (steps.isEmpty()) {
-                    Text(
-                        "Add saved loops below to build a practice sequence.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Column(
-                        Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        steps.forEachIndexed { i, step ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(ControlShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                            ) {
-                                Column {
-                                    IconButton(
-                                        onClick = { onMoveStep(step.stepId, -1) },
-                                        enabled = i > 0,
-                                        modifier = Modifier.size(28.dp),
-                                    ) { Icon(Icons.Default.KeyboardArrowUp, "Move up") }
-                                    IconButton(
-                                        onClick = { onMoveStep(step.stepId, 1) },
-                                        enabled = i < steps.lastIndex,
-                                        modifier = Modifier.size(28.dp),
-                                    ) { Icon(Icons.Default.KeyboardArrowDown, "Move down") }
-                                }
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    nameById[step.loopId] ?: "(deleted)",
-                                    Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount - 1) }) { Text("−") }
-                                Text("×${step.repeatCount}", style = MaterialTheme.typography.titleSmall)
-                                TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount + 1) }) { Text("+") }
-                                IconButton(onClick = { onRemoveStep(step.stepId) }) {
-                                    Icon(Icons.Default.Close, "Remove step")
-                                }
+
+            if (steps.isEmpty()) {
+                Text(
+                    "Add saved loops below to build a practice sequence.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Column(
+                    Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    steps.forEachIndexed { i, step ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(ControlShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        ) {
+                            Column {
+                                IconButton(
+                                    onClick = { onMoveStep(step.stepId, -1) },
+                                    enabled = i > 0,
+                                    modifier = Modifier.size(28.dp),
+                                ) { Icon(Icons.Default.KeyboardArrowUp, "Move up") }
+                                IconButton(
+                                    onClick = { onMoveStep(step.stepId, 1) },
+                                    enabled = i < steps.lastIndex,
+                                    modifier = Modifier.size(28.dp),
+                                ) { Icon(Icons.Default.KeyboardArrowDown, "Move down") }
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                nameById[step.loopId] ?: "(deleted)",
+                                Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount - 1) }) { Text("−") }
+                            Text("×${step.repeatCount}", style = MaterialTheme.typography.titleSmall)
+                            TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount + 1) }) { Text("+") }
+                            IconButton(onClick = { onRemoveStep(step.stepId) }) {
+                                Icon(Icons.Default.Close, "Remove step")
                             }
                         }
                     }
                 }
+            }
 
-                Spacer(Modifier.height(8.dp))
-                Text("Add step", style = MaterialTheme.typography.labelMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    loops.forEach { loop ->
-                        AssistChip(
-                            onClick = { onAddStep(loop.id) },
-                            enabled = steps.size < MAX_ARRANGEMENT_STEPS,
-                            label = { Text(loop.label, maxLines = 1) },
-                            shape = ControlShape,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = repeatWhole, onCheckedChange = onToggleRepeatWhole)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Repeat whole sequence")
+            Text("Add step", style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                loops.forEach { loop ->
+                    AssistChip(
+                        onClick = { onAddStep(loop.id) },
+                        enabled = steps.size < MAX_ARRANGEMENT_STEPS,
+                        label = { Text(loop.label, maxLines = 1) },
+                        shape = ControlShape,
+                    )
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-    )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = repeatWhole, onCheckedChange = onToggleRepeatWhole)
+                Spacer(Modifier.width(8.dp))
+                Text("Repeat whole sequence")
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1364,6 +1400,7 @@ private fun BeatControls(
     stretching: Boolean,
     locked: Boolean,
     onLocked: () -> Unit,
+    onOptions: () -> Unit,
     viewModel: LooperViewModel,
 ) {
     // With the arrangement armed, the Play button runs the sequence, so these grid/tempo controls no
@@ -1373,57 +1410,56 @@ private fun BeatControls(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        FlowRow(
+        // Four equal-width chips. Snap is a toggle; Auto/Tap set the tempo; Options opens the
+        // track's extra settings (count-in for now). A centred label keeps them looking uniform.
+        Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Snap is a real toggle; Auto and Tap are momentary actions. Styling them all as
-            // chips keeps the grid controls reading as one tidy row.
+            val chipLabel: @Composable (String) -> Unit = { t ->
+                Text(t, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            }
             FilterChip(
                 selected = grid.enabled,
                 onClick = { if (locked) onLocked() else viewModel.toggleSnap() },
-                label = { Text("Snap") },
+                label = { chipLabel("Snap") },
                 shape = ControlShape,
-                modifier = dim,
+                modifier = Modifier.weight(1f).then(dim),
             )
-
             FilterChip(
                 selected = false,
                 enabled = !detecting,
                 onClick = { if (locked) onLocked() else viewModel.detectBeats() },
-                label = { Text("Auto") },
-                leadingIcon = if (detecting) {
-                    { CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) }
-                } else null,
+                label = {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (detecting) {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text("Auto")
+                    }
+                },
                 shape = ControlShape,
-                modifier = dim,
+                modifier = Modifier.weight(1f).then(dim),
             )
-
             FilterChip(
                 selected = false,
                 onClick = { if (locked) onLocked() else viewModel.tapTempo() },
-                label = { Text("Tap") },
+                label = { chipLabel("Tap") },
                 shape = ControlShape,
-                modifier = dim,
-            )
-
-            // Octave fix: auto-detect most often errs by a factor of two, which ±1 nudges can't
-            // reach — one tap halves or doubles the tempo instead.
-            FilterChip(
-                selected = false,
-                onClick = { if (locked) onLocked() else viewModel.halveTempo() },
-                label = { Text("½×") },
-                shape = ControlShape,
-                modifier = dim,
+                modifier = Modifier.weight(1f).then(dim),
             )
             FilterChip(
                 selected = false,
-                onClick = { if (locked) onLocked() else viewModel.doubleTempo() },
-                label = { Text("2×") },
+                onClick = onOptions,
+                label = { chipLabel("Options") },
                 shape = ControlShape,
-                modifier = dim,
+                modifier = Modifier.weight(1f),
             )
         }
 
@@ -1433,15 +1469,108 @@ private fun BeatControls(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                var octaveMenu by remember { mutableStateOf(false) }
                 Row(dim, verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { if (locked) onLocked() else viewModel.nudgeBpm(-1f) }) { Text("−") }
-                    Text("${grid.bpm.roundToInt()} BPM", style = MaterialTheme.typography.titleSmall)
+                    // Tap the BPM to halve or double it — the octave fix for when auto-detect lands
+                    // a factor of two off, which the ±1 nudges can't reach.
+                    Box {
+                        Text(
+                            "${grid.bpm.roundToInt()} BPM",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier
+                                .clip(ControlShape)
+                                .clickable { if (locked) onLocked() else octaveMenu = true }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                        DropdownMenu(expanded = octaveMenu, onDismissRequest = { octaveMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Halve tempo") },
+                                onClick = { viewModel.halveTempo(); octaveMenu = false },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Double tempo") },
+                                onClick = { viewModel.doubleTempo(); octaveMenu = false },
+                            )
+                        }
+                    }
                     TextButton(onClick = { if (locked) onLocked() else viewModel.nudgeBpm(1f) }) { Text("+") }
                 }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 SpeedLink(speed, stretching, locked, onLocked, viewModel::setSpeed)
             }
+        }
+    }
+}
+
+/**
+ * The track Options bottom sheet. Tabbed so more per-track option groups can slot in later; for
+ * now the only tab is Count-in. To add one, append a title to [tabs] and a branch to the `when`.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OptionsSheet(
+    countIn: CountInState,
+    bpm: Float,
+    onSetCountIn: (beatsPerBar: Int, bars: Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        var tab by remember { mutableStateOf(0) }
+        val tabs = listOf("Count-in")
+        PrimaryTabRow(selectedTabIndex = tab) {
+            tabs.forEachIndexed { i, title ->
+                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title) })
+            }
+        }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(top = 16.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when (tab) {
+                0 -> CountInTab(countIn, bpm, onSetCountIn)
+            }
+        }
+    }
+}
+
+/** Count-in settings: how it's triggered, plus the meter and length pickers. */
+@Composable
+private fun CountInTab(
+    state: CountInState,
+    bpm: Float,
+    onSet: (beatsPerBar: Int, bars: Int) -> Unit,
+) {
+    Text(
+        "Long-press Play to start with a count-in: clicks at the track tempo " +
+            "(${bpm.roundToInt()} BPM) before playback begins.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text("Beats per bar", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(2, 3, 4, 6).forEach { n ->
+            FilterChip(
+                selected = state.beatsPerBar == n,
+                onClick = { onSet(n, state.bars) },
+                label = { Text(n.toString()) },
+                shape = ControlShape,
+            )
+        }
+    }
+    Text("Bars", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(1, 2).forEach { n ->
+            FilterChip(
+                selected = state.bars == n,
+                onClick = { onSet(state.beatsPerBar, n) },
+                label = { Text(n.toString()) },
+                shape = ControlShape,
+            )
         }
     }
 }

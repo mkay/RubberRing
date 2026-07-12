@@ -40,6 +40,10 @@ data class LibraryTrack(
     // whether that arrangement repeats from the top or stops after the last step.
     val arrangementActive: Boolean = false,
     val arrangementRepeat: Boolean = false,
+    // Count-in settings: a long-press on Play sounds a metronome for [countInBars] bars of
+    // [countInBeatsPerBar] beats first. The count-in inherits the track's [bpm]; accent on beat 1.
+    val countInBeatsPerBar: Int = 4,
+    val countInBars: Int = 1,
 ) {
     /** The name to show the user: the chosen [title] if set, otherwise the original file name. */
     val name: String get() = title?.takeIf { it.isNotBlank() } ?: displayName

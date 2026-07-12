@@ -211,6 +211,8 @@ class LibraryRepository(context: Context) {
                     arrangement = readArrangement(o.optJSONArray("arrangement")),
                     arrangementActive = o.optBoolean("arrangementActive", false),
                     arrangementRepeat = o.optBoolean("arrangementRepeat", false),
+                    countInBeatsPerBar = o.optInt("countInBeatsPerBar", 4),
+                    countInBars = o.optInt("countInBars", 1),
                 )
             }
         }.getOrDefault(emptyList())
@@ -266,7 +268,9 @@ class LibraryRepository(context: Context) {
                     .put("savedLoops", writeLoops(t.savedLoops))
                     .put("arrangement", writeArrangement(t.arrangement))
                     .put("arrangementActive", t.arrangementActive)
-                    .put("arrangementRepeat", t.arrangementRepeat),
+                    .put("arrangementRepeat", t.arrangementRepeat)
+                    .put("countInBeatsPerBar", t.countInBeatsPerBar)
+                    .put("countInBars", t.countInBars),
             )
         }
         // Write to a temp file then replace, so a crash mid-write can't corrupt the index.

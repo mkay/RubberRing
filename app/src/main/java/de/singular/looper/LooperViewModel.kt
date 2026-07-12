@@ -10,6 +10,7 @@ import de.singular.looper.audio.AudioDecoder
 import de.singular.looper.audio.BeatDetector
 import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.LoopPlayer
+import de.singular.looper.audio.Metronome
 import de.singular.looper.audio.TimeStretch
 import de.singular.looper.audio.WaveformData
 import de.singular.looper.library.ArrangementStep
@@ -86,6 +87,15 @@ data class BeatGridState(
     val enabled: Boolean = false,
 )
 
+/**
+ * Per-track count-in settings: [bars] bars of [beatsPerBar] clicks at the track's tempo, with the
+ * accent on beat 1 (3 = 3/4, 4 = 4/4). Triggered per-play by a long-press on Play, not a toggle.
+ */
+data class CountInState(
+    val beatsPerBar: Int = 4,
+    val bars: Int = 1,
+)
+
 class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow<LooperUiState>(LooperUiState.Empty)
@@ -102,6 +112,13 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _grid = MutableStateFlow(BeatGridState())
     val grid: StateFlow<BeatGridState> = _grid.asStateFlow()
+
+    private val _countIn = MutableStateFlow(CountInState())
+    val countIn: StateFlow<CountInState> = _countIn.asStateFlow()
+
+    // True while the count-in clicks are sounding but the audio hasn't started yet (drives the UI).
+    private val _countingIn = MutableStateFlow(false)
+    val countingIn: StateFlow<Boolean> = _countingIn.asStateFlow()
 
     private val _detecting = MutableStateFlow(false)
     val detecting: StateFlow<Boolean> = _detecting.asStateFlow()
@@ -183,7 +200,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             p.setRegion(audio.fractionToFrame(r.startFrac), audio.fractionToFrame(r.endFrac))
         }
         _playhead.value = r.startFrac
-        if (resume) startPlayback()
+        if (resume) startPlayback(withCountIn = false)
     }
 
     private val library = LibraryRepository(app)
@@ -346,6 +363,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         _arrangement.value = emptyList()
         _arrangementActive.value = false
         _arrangementRepeat.value = false
+        _countIn.value = CountInState()
         _playhead.value = 0f
         _state.value = LooperUiState.Empty
     }
@@ -353,6 +371,8 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private val tapTimes = mutableListOf<Long>()
 
     private var player: LoopPlayer? = null
+    private val metronome by lazy { Metronome() }
+    private var countInJob: Job? = null
     private var loadJob: Job? = null
     private var tickerJob: Job? = null
     private var detectJob: Job? = null
@@ -508,11 +528,31 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             subdivision = 1,
             enabled = track.snap,
         )
+        _countIn.value = CountInState(
+            beatsPerBar = track.countInBeatsPerBar,
+            bars = track.countInBars,
+        )
         val start = track.startFrac.coerceIn(0f, 1f)
         val end = track.endFrac.coerceIn(start, 1f)
         _region.value = LoopRegion(start, end)
         player?.setRegion(audio.fractionToFrame(start), audio.fractionToFrame(end))
         _playhead.value = start
+    }
+
+    // ---- Count-in ----
+
+    /** Set the count-in's meter and length (the Options popup). */
+    fun setCountIn(beatsPerBar: Int, bars: Int) {
+        _countIn.value = CountInState(
+            beatsPerBar = beatsPerBar.coerceIn(2, 8),
+            bars = bars.coerceIn(1, 2),
+        )
+        val track = currentTrack ?: return
+        val ci = _countIn.value
+        currentTrack = track.copy(
+            countInBeatsPerBar = ci.beatsPerBar,
+            countInBars = ci.bars,
+        ).also { persistTrack(it) }
     }
 
     // ---- Named loops ----
@@ -771,9 +811,11 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         updateRegion(newStart = r.startFrac, newEnd = r.endFrac)
     }
 
-    fun togglePlay() {
-        val p = player ?: return
-        if (p.isPlaying) stopPlayback() else startPlayback()
+    fun togglePlay(withCountIn: Boolean = false) {
+        if (player == null) return
+        // Use the UI's playing state, not the LoopPlayer's: during a count-in we're "playing" but
+        // the audio hasn't started yet, and a tap must still stop (cancelling the count-in).
+        if (_isPlaying.value) stopPlayback() else startPlayback(withCountIn)
     }
 
     /** Move the playhead to a fraction of the file (double-tap seek). */
@@ -792,7 +834,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun startPlayback() {
+    private fun startPlayback(withCountIn: Boolean) {
         val p = player ?: return
         // A plain play cancels any running arrangement and loops the single current region.
         arrangementJob?.cancel()
@@ -800,9 +842,35 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         // Playback always begins at the start marker.
         p.rewind()
         _playhead.value = if (stretched) stretchStartFrac else _region.value.startFrac
-        p.play()
         _isPlaying.value = true
-        launchTicker(p)
+        if (withCountIn) {
+            // Sound the count-in first, then start the audio on the following downbeat. A Stop
+            // during the count cancels this job, so p.play() is never reached.
+            countInJob?.cancel()
+            countInJob = viewModelScope.launch {
+                playCountIn()
+                p.play()
+                launchTicker(p)
+            }
+        } else {
+            p.play()
+            launchTicker(p)
+        }
+    }
+
+    /**
+     * Sound the count-in and suspend until it finishes. Cancelling the calling coroutine (e.g. via
+     * Stop) aborts the clicks and propagates, so the caller won't start audio. Counts in at the
+     * tempo the user will actually hear (track BPM × current speed).
+     */
+    private suspend fun playCountIn() {
+        val ci = _countIn.value
+        _countingIn.value = true
+        try {
+            metronome.countIn(_grid.value.bpm * _speed.value, ci.beatsPerBar, ci.bars)
+        } finally {
+            _countingIn.value = false
+        }
     }
 
     /** Drive [_playhead] from the player position until it stops. Used by both play modes. */
@@ -821,6 +889,10 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun stopPlayback() {
+        countInJob?.cancel()
+        countInJob = null
+        metronome.stop()
+        _countingIn.value = false
         arrangementJob?.cancel()
         arrangementJob = null
         _playingStep.value = null
@@ -835,7 +907,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
      * stop (or restart if [repeatWhole]). Steps whose loop was deleted are skipped. Runs at 1×
      * (any active time-stretch is reset first), so playback stays on the simple full-file path.
      */
-    fun playArrangement() {
+    fun playArrangement(withCountIn: Boolean = false) {
         val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
         val repeatWhole = _arrangementRepeat.value
         val byId = _savedLoops.value.associateBy { it.id }
@@ -850,6 +922,8 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
         _isPlaying.value = true
         arrangementJob = viewModelScope.launch {
+            // Count in once, before the first loop only — not before every step.
+            if (withCountIn) playCountIn()
             var index = 0
             while (isActive) {
                 val (loop, count) = steps[index]
@@ -946,6 +1020,8 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         detectJob?.cancel()
         stretchJob?.cancel()
         arrangementJob?.cancel()
+        countInJob?.cancel()
+        metronome.stop()
         // Best-effort final save so a quit within the debounce window doesn't lose the last edit.
         flushLoopState()
         player?.release()
