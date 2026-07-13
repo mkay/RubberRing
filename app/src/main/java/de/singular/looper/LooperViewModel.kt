@@ -55,6 +55,7 @@ private const val KEY_FOLLOW_PLAYHEAD = "follow_playhead"
 private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
 private const val KEY_SAVE_ZOOM = "save_zoom"
 private const val KEY_THEME_MODE = "theme_mode"
+private const val KEY_EDGE_INSET = "edge_inset"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
@@ -262,6 +263,18 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit { putBoolean(KEY_SAVE_ZOOM, _saveZoom.value) }
     }
 
+    // Whether the waveform holds back from the system gesture strips. On by default — a marker
+    // parked at the very edge otherwise sits under the back gesture — but it costs waveform width,
+    // so anyone happy to reach past it (or on 3-button nav, where the inset is zero anyway) can
+    // turn it off.
+    private val _edgeInset = MutableStateFlow(prefs.getBoolean(KEY_EDGE_INSET, true))
+    val edgeInset: StateFlow<Boolean> = _edgeInset.asStateFlow()
+
+    fun toggleEdgeInset() {
+        _edgeInset.value = !_edgeInset.value
+        prefs.edit { putBoolean(KEY_EDGE_INSET, _edgeInset.value) }
+    }
+
     private val _themeMode = MutableStateFlow(readThemeMode(prefs.getString(KEY_THEME_MODE, null)))
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
@@ -331,6 +344,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         .put(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
         .put(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
         .put(KEY_SAVE_ZOOM, _saveZoom.value)
+        .put(KEY_EDGE_INSET, _edgeInset.value)
         .put(KEY_THEME_MODE, _themeMode.value.name)
         .toString()
 
@@ -339,11 +353,13 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (o.has(KEY_FOLLOW_PLAYHEAD)) _followPlayhead.value = o.getBoolean(KEY_FOLLOW_PLAYHEAD)
         if (o.has(KEY_KEEP_SCREEN_ON)) _keepScreenOn.value = o.getBoolean(KEY_KEEP_SCREEN_ON)
         if (o.has(KEY_SAVE_ZOOM)) _saveZoom.value = o.getBoolean(KEY_SAVE_ZOOM)
+        if (o.has(KEY_EDGE_INSET)) _edgeInset.value = o.getBoolean(KEY_EDGE_INSET)
         if (o.has(KEY_THEME_MODE)) _themeMode.value = readThemeMode(o.getString(KEY_THEME_MODE))
         prefs.edit {
             putBoolean(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
             putBoolean(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
             putBoolean(KEY_SAVE_ZOOM, _saveZoom.value)
+            putBoolean(KEY_EDGE_INSET, _edgeInset.value)
             putString(KEY_THEME_MODE, _themeMode.value.name)
         }
     }

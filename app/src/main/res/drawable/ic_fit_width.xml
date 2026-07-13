@@ -1,0 +1,18 @@
+<!--
+  Material Symbols "fit_width". Not in compose material-icons-extended (that library is generated
+  from the older classic icon set), so it ships as a drawable. Material Symbols author their paths
+  in a 960-unit grid whose origin sits at the *top* of a y-up box (viewBox "0 -960 960 960"), hence
+  the group translate: it moves the path back down into Android's y-down viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <!-- Left white: Compose's Icon tints the whole vector to the colour the row asks for. -->
+    <group android:translateY="960">
+        <path
+            android:fillColor="@android:color/white"
+            android:pathData="M120,-120v-720h80v720h-80ZM760,-120v-720h80v720h-80ZM280,-440v-80h80v80h-80ZM440,-440v-80h80v80h-80ZM600,-440v-80h80v80h-80Z" />
+    </group>
+</vector>

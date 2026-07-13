@@ -108,7 +108,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -206,6 +208,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
     val keepScreenOn by viewModel.keepScreenOn.collectAsStateWithLifecycle()
     val saveZoom by viewModel.saveZoom.collectAsStateWithLifecycle()
+    val edgeInset by viewModel.edgeInset.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val library by viewModel.libraryTracks.collectAsStateWithLifecycle()
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
@@ -292,10 +295,12 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             following = following,
             keepScreenOn = keepScreenOn,
             saveZoom = saveZoom,
+            edgeInset = edgeInset,
             themeMode = themeMode,
             onToggleFollow = viewModel::toggleFollowPlayhead,
             onToggleKeepScreenOn = viewModel::toggleKeepScreenOn,
             onToggleSaveZoom = viewModel::toggleSaveZoom,
+            onToggleEdgeInset = viewModel::toggleEdgeInset,
             onSelectTheme = viewModel::setThemeMode,
             onBackup = startBackup,
             onRestore = startRestore,
@@ -442,10 +447,12 @@ private fun SettingsScreen(
     following: Boolean,
     keepScreenOn: Boolean,
     saveZoom: Boolean,
+    edgeInset: Boolean,
     themeMode: ThemeMode,
     onToggleFollow: () -> Unit,
     onToggleKeepScreenOn: () -> Unit,
     onToggleSaveZoom: () -> Unit,
+    onToggleEdgeInset: () -> Unit,
     onSelectTheme: (ThemeMode) -> Unit,
     onBackup: () -> Unit,
     onRestore: () -> Unit,
@@ -475,6 +482,12 @@ private fun SettingsScreen(
             SettingSwitchRow("Follow playhead", Icons.Default.MyLocation, following, onToggleFollow)
             SettingSwitchRow("Keep screen on", Icons.Default.Lightbulb, keepScreenOn, onToggleKeepScreenOn)
             SettingSwitchRow("Save zoom level", Icons.Default.ZoomIn, saveZoom, onToggleSaveZoom)
+            SettingSwitchRow(
+                "Add padding to waveform",
+                ImageVector.vectorResource(R.drawable.ic_fit_width),
+                edgeInset,
+                onToggleEdgeInset,
+            )
 
             DrawerSectionLabel("Appearance")
             ThemeModeChips(
@@ -950,16 +963,19 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         // of moving it. The inset is derived from the *reported* gesture insets, so it tracks the
         // user's back-sensitivity setting and collapses to zero on 3-button nav, where there is no
         // gesture to dodge. Half of it is deliberate: a full inset costs too much waveform width,
-        // and the waveform's own systemGestureExclusion() covers the rest of the overlap.
+        // and the waveform's own systemGestureExclusion() covers the rest of the overlap. It still
+        // costs some width, so Settings can turn it off for anyone who'd rather have the pixels.
+        val edgeInset by viewModel.edgeInset.collectAsStateWithLifecycle()
         val gestureInsets = WindowInsets.systemGestures.asPaddingValues()
         val layoutDirection = LocalLayoutDirection.current
+        val inset = if (edgeInset) EDGE_INSET_FRACTION else 0f
         Box(
             Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .padding(
-                    start = gestureInsets.calculateStartPadding(layoutDirection) * EDGE_INSET_FRACTION,
-                    end = gestureInsets.calculateEndPadding(layoutDirection) * EDGE_INSET_FRACTION,
+                    start = gestureInsets.calculateStartPadding(layoutDirection) * inset,
+                    end = gestureInsets.calculateEndPadding(layoutDirection) * inset,
                 )
         ) {
             LoopWaveform(
