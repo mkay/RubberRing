@@ -12,6 +12,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - "Add padding to waveform" (Settings → Playback, on by default) — turn the new
   edge padding off to get the full waveform width back.
 
+- Quick help now mentions that a long-press on Play starts with a count-in.
+
 ### Changed
 - The "Keep screen on" icon is now a brightness-alert symbol instead of a lightbulb,
   which read as a light/dark-mode toggle.

@@ -680,6 +680,11 @@ private fun QuickHelpDialog(onDismiss: () -> Unit) {
                         "playhead line to scrub it.",
                 )
                 HelpItem(
+                    "Start with a count-in",
+                    "Long-press Play to hear a count-in before the audio comes in; a normal tap " +
+                        "starts straight away. Set its meter and length under Options.",
+                )
+                HelpItem(
                     "Zoom & scroll",
                     "Pinch with two fingers to zoom the waveform in and out. When zoomed in, " +
                         "drag in open space to scroll, or use the minimap strip at the bottom.",
