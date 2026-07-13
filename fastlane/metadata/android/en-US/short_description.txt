@@ -1,1 +1,1 @@
-Loop a section of any song, gapless, snapped to an auto-detected beat grid.
+A looper for practicing song parts.
