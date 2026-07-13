@@ -13,13 +13,18 @@ android {
         applicationId = "de.singular.looper"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.5"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Keep the git sha out of the APK. F-Droid rebuilds the *tagged* commit and compares
+            // byte-for-byte with the published binary, so an embedded sha turns any slip between
+            // "what was built" and "what was tagged" into an unreproducible release (it cost us
+            // 0.3). Without it, the two can't disagree.
+            vcsInfo { include = false }
         }
     }
 

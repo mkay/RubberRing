@@ -6,15 +6,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5] - 2026-07-13
+
 ### Added
+- Count-in — long-press Play to start after a metronome counts you in at the
+  track's tempo. Its meter (2/3/4/6 beats per bar) and length (1 or 2 bars) are
+  set per track under Options, and travel with the track.
 - A hint over the waveform on every track you open, pointing out that markers are
   moved with a long-press — the one gesture nothing on screen could show.
 - "Add padding to waveform" (Settings → Playback, on by default) — turn the new
   edge padding off to get the full waveform width back.
-
 - Quick help now mentions that a long-press on Play starts with a count-in.
 
 ### Changed
+- Options and Arrange open as bottom sheets instead of popups, so they get the
+  room they need and dismiss with a swipe.
+- The BPM octave menu lists Double above Halve.
 - The "Keep screen on" icon is now a brightness-alert symbol instead of a lightbulb,
   which read as a light/dark-mode toggle.
 
@@ -22,6 +29,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Loop markers parked at the very start or end of the waveform sat on top of
   Android's back-gesture strip, so trying to drag one left the app instead of
   moving the marker. The waveform now holds back from the gesture strips.
+
+### Known issues
+- Beat detection still misreads the tempo on many real recordings, and the
+  count-in's handoff to playback can sit slightly off the beat, most noticeably at
+  fast tempos. Both are next on the agenda; BPM, beat grid and markers can all be
+  corrected by hand in the meantime.
 
 ## [0.4] - 2026-07-12
 

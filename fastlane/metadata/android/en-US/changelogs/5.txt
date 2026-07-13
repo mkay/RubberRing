@@ -1,0 +1,6 @@
+• Count-in: long-press Play to start after a metronome counts you in at the track's tempo. Set its meter and length per track under Options.
+• Options and Arrange are now bottom sheets, so they get the room they need.
+• A hint over the waveform points out that markers are moved with a long-press.
+• Waveform edge padding can be switched off in Settings.
+• Fixed: markers at the very start or end no longer collide with the back gesture.
+• Known issues: beat detection and the count-in's timing still need work.

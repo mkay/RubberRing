@@ -5,7 +5,7 @@
 
 An Android tool for practicing song parts. Pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop — slowed down without changing pitch, and snapped to an editable beat grid. Chain loops into practice arrangements to drill transitions.
 
-Early-stage release — everything should work as advertised; beat detection needs improvement. Feedback and bug reports welcome via Issues.
+Early-stage release — expect rough edges. Beat detection and count-in still need improvement. Feedback and bug reports welcome via Issues.
 
 ## Screenshots
 
