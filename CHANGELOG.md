@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- A hint over the waveform on every track you open, pointing out that markers are
+  moved with a long-press — the one gesture nothing on screen could show.
+- "Add padding to waveform" (Settings → Playback, on by default) — turn the new
+  edge padding off to get the full waveform width back.
+
+### Changed
+- The "Keep screen on" icon is now a brightness-alert symbol instead of a lightbulb,
+  which read as a light/dark-mode toggle.
+
+### Fixed
+- Loop markers parked at the very start or end of the waveform sat on top of
+  Android's back-gesture strip, so trying to drag one left the app instead of
+  moving the marker. The waveform now holds back from the gesture strips.
+
 ## [0.4] - 2026-07-12
 
 Maintenance release: identical features to 0.3, rebuilt with clean release

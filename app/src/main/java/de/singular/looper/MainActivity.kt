@@ -51,7 +51,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
@@ -365,7 +364,10 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                             IconButton(onClick = { showKeepAwakeInfo = true }) {
                                 // No explicit tint: inherits the app bar's content colour (white on
                                 // the dark bar), matching the menu icon rather than an accent tone.
-                                Icon(Icons.Default.Lightbulb, contentDescription = "Screen kept on")
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_brightness_alert),
+                                    contentDescription = "Screen kept on",
+                                )
                             }
                         }
                     },
@@ -417,7 +419,12 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     if (showKeepAwakeInfo) {
         AlertDialog(
             onDismissRequest = { showKeepAwakeInfo = false },
-            icon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_brightness_alert),
+                    contentDescription = null,
+                )
+            },
             title = { Text("Screen stays on") },
             text = {
                 Text(
@@ -480,7 +487,12 @@ private fun SettingsScreen(
         ) {
             DrawerSectionLabel("Playback")
             SettingSwitchRow("Follow playhead", Icons.Default.MyLocation, following, onToggleFollow)
-            SettingSwitchRow("Keep screen on", Icons.Default.Lightbulb, keepScreenOn, onToggleKeepScreenOn)
+            SettingSwitchRow(
+                "Keep screen on",
+                ImageVector.vectorResource(R.drawable.ic_brightness_alert),
+                keepScreenOn,
+                onToggleKeepScreenOn,
+            )
             SettingSwitchRow("Save zoom level", Icons.Default.ZoomIn, saveZoom, onToggleSaveZoom)
             SettingSwitchRow(
                 "Add padding to waveform",
