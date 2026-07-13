@@ -110,7 +110,8 @@ private const val LP_MULTI = 3
  *    Play/stop is a dedicated button, so a stray tap never starts or stops playback.
  *  - **Long-press a marker's grip tab (or its line), then drag** moves that marker; the hold
  *    prevents accidental nudges, a grab offset keeps the line steady under the finger, and a
- *    haptic confirms the grab.
+ *    haptic confirms the grab. [onMarkerGrabbed] fires at that moment — the gesture is invisible
+ *    until it's discovered, so the caller uses this to retire its "long-press a marker" hint.
  *  - **Drag near the playhead** scrubs it.
  *  - **One-finger drag** in open space scrolls the view (when zoomed in).
  *  - **Two fingers** pinch-zoom and pan.
@@ -135,11 +136,13 @@ fun LoopWaveform(
     onEndChange: (Float) -> Unit,
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    onMarkerGrabbed: () -> Unit = {},
 ) {
     val start by rememberUpdatedState(startFrac)
     val end by rememberUpdatedState(endFrac)
     val playhead by rememberUpdatedState(playheadFrac)
     val seek by rememberUpdatedState(onSeek)
+    val grabbed by rememberUpdatedState(onMarkerGrabbed)
     val haptic = LocalHapticFeedback.current
 
     // Pick the light or dark waveform palette to match the theme actually in effect (which may
@@ -266,6 +269,7 @@ fun LoopWaveform(
                         val frac = if (nearHandle == HANDLE_START) start else end
                         grabDx = downX - (frac - offset) * w0 * zoom
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        grabbed()
                     }
                 } else if (playheadNear(downX)) {
                     mode = PLAYHEAD // scrubbing the playhead needs no hold

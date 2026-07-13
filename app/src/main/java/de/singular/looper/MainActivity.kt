@@ -9,6 +9,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,8 +35,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -101,6 +108,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -121,6 +129,7 @@ import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.ArrangementStep
 import de.singular.looper.library.SavedLoop
 import de.singular.looper.ui.LoopWaveform
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // Brand colour used for buttons, chips, and the marker accents.
@@ -142,6 +151,20 @@ private val LooperLightColors = lightColorScheme(
 
 // Controls use a gentle 5px corner rather than the fully-rounded Material default.
 private val ControlShape = RoundedCornerShape(5.dp)
+
+// How long the "long-press a marker" hint stays up on a freshly opened track, and how long it
+// takes to fade. Long enough to read once, short enough to stay out of the way.
+private const val HINT_VISIBLE_MS = 2250L
+private const val HINT_FADE_MS = 400
+
+// The hint sits on top of the waveform it's describing, so it stays see-through even at rest —
+// it's a note laid over the audio, not a panel covering it.
+private const val HINT_OPACITY = 0.5f
+
+// How much of the system gesture inset the waveform keeps clear of. A full inset guarantees markers
+// never overlap the back-gesture strip but eats real waveform width, so we take half and let the
+// waveform's systemGestureExclusion() cover the remaining sliver.
+private const val EDGE_INSET_FRACTION = 0.5f
 
 /** Dim factor for controls locked out while an arrangement is enabled. */
 private const val LOCKED_ALPHA = 0.4f
@@ -907,24 +930,76 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         // composes; read it once to seed the waveform, which owns pan/zoom during the session and
         // mirrors changes back via onViewportChange.
         val initialViewport = remember(audio) { viewModel.viewport.value }
-        LoopWaveform(
-            waveform = audio.waveform,
-            startFrac = region.startFrac,
-            endFrac = region.endFrac,
-            playheadFrac = playhead,
-            showPlayhead = true,
-            followPlayhead = following,
-            gridOffsetFrac = grid.downbeatFrac,
-            gridIntervalFrac = if (grid.enabled) intervalFrac else 0f,
-            gridLinesPerBeat = grid.subdivision,
-            initialZoom = initialViewport.zoom,
-            initialOffset = initialViewport.offset,
-            onViewportChange = viewModel::setViewport,
-            onStartChange = viewModel::setStart,
-            onEndChange = viewModel::setEnd,
-            onSeek = viewModel::seek,
-            modifier = Modifier.fillMaxWidth().weight(1f),
+
+        // Long-pressing a marker is the one gesture nothing on screen can show, so the hint rides
+        // along with every track that's opened. It fades on its own — never something to dismiss —
+        // and retires early once a marker is actually grabbed, since it sits where the drag happens.
+        var hintDone by remember(audio) { mutableStateOf(false) }
+        LaunchedEffect(audio) {
+            delay(HINT_VISIBLE_MS)
+            hintDone = true
+        }
+        val hintAlpha by animateFloatAsState(
+            targetValue = if (hintDone) 0f else 1f,
+            animationSpec = tween(HINT_FADE_MS),
+            label = "markerHintAlpha",
         )
+
+        // Hold the waveform back from the system's back-gesture strips, so a marker parked at the
+        // very start or end isn't sitting on top of one — grabbing it used to leave the app instead
+        // of moving it. The inset is derived from the *reported* gesture insets, so it tracks the
+        // user's back-sensitivity setting and collapses to zero on 3-button nav, where there is no
+        // gesture to dodge. Half of it is deliberate: a full inset costs too much waveform width,
+        // and the waveform's own systemGestureExclusion() covers the rest of the overlap.
+        val gestureInsets = WindowInsets.systemGestures.asPaddingValues()
+        val layoutDirection = LocalLayoutDirection.current
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(
+                    start = gestureInsets.calculateStartPadding(layoutDirection) * EDGE_INSET_FRACTION,
+                    end = gestureInsets.calculateEndPadding(layoutDirection) * EDGE_INSET_FRACTION,
+                )
+        ) {
+            LoopWaveform(
+                waveform = audio.waveform,
+                startFrac = region.startFrac,
+                endFrac = region.endFrac,
+                playheadFrac = playhead,
+                showPlayhead = true,
+                followPlayhead = following,
+                gridOffsetFrac = grid.downbeatFrac,
+                gridIntervalFrac = if (grid.enabled) intervalFrac else 0f,
+                gridLinesPerBeat = grid.subdivision,
+                initialZoom = initialViewport.zoom,
+                initialOffset = initialViewport.offset,
+                onViewportChange = viewModel::setViewport,
+                onStartChange = viewModel::setStart,
+                onEndChange = viewModel::setEnd,
+                onSeek = viewModel::seek,
+                modifier = Modifier.fillMaxSize(),
+                onMarkerGrabbed = { hintDone = true },
+            )
+
+            // Sits above the waveform but takes no touches of its own — the gesture it describes has
+            // to stay available through it, and a hint that ate the taps would be its own bug.
+            // Neutral (the inverse-surface pair Material uses for snackbars) rather than brand red:
+            // it has to read as a passing note over both waveform palettes, not as a control.
+            if (hintAlpha > 0f) {
+                Text(
+                    "Long-press a marker to move it",
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .alpha(hintAlpha * HINT_OPACITY)
+                        .clip(ControlShape)
+                        .background(MaterialTheme.colorScheme.inverseSurface)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
 
         Spacer(Modifier.height(8.dp))
 
