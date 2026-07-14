@@ -9,3 +9,5 @@
 .externalNativeBuild
 .cxx
 PLAN.md
+*.apk
+*.idsig
