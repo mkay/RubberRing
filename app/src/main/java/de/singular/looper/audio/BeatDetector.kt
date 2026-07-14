@@ -21,14 +21,17 @@ data class BeatEstimate(val bpm: Float, val downbeatFrac: Float)
  * with a **comb filter** that sums the correlation at that tempo's period *and its harmonics*
  * (2×, 3×, 4×). The comb is the key to avoiding octave/metrical errors (e.g. reporting 144 for a
  * 108 BPM song): a wrong multiple lines up with only some of the true beats, while the real tempo
- * lines up with all of them. A gentle prior around 120 BPM breaks remaining ties.
+ * lines up with all of them. A gentle prior around 120 BPM breaks remaining ties. A final step
+ * catches **compound meters** (6/8 and friends), where the beat is the dotted note rather than the
+ * subdivision the sweep locks onto.
  *
  * This is deliberately not a full beat tracker — it assumes a roughly steady tempo, which fits
  * the use case (looping a section for practice), and every value it produces is hand-overridable.
  */
 object BeatDetector {
 
-    // Tempo search range. Practice material is almost always inside this.
+    // Tempo search range for the sweep. Practice material is almost always inside this. The
+    // *reported* tempo can still land below MIN_BPM: the compound-meter step divides by 1.5.
     private const val MIN_BPM = 70f
     private const val MAX_BPM = 180f
 
@@ -56,6 +59,20 @@ object BeatDetector {
     // toward a humanly plausible tempo without overriding strong evidence.
     private const val PRIOR_CENTER_BPM = 120.0
     private const val PRIOR_WIDTH = 0.9 // in ln-tempo units; larger = gentler
+
+    // Compound-meter test (see the dotted-beat step in [detect]). Both conditions must hold, and
+    // each earns its keep: on a set of real tracks with known meters, one alone would have
+    // misfired on duple material that the other correctly vetoed.
+    //
+    //  - PERIODICITY: the dotted lag must be at least as periodic as the beat the sweep found.
+    //  - PULSE: a grid at the dotted period must also collect more onset energy *per pulse* — i.e.
+    //    it must actually land on the strong hits, not merely repeat.
+    private const val COMPOUND_MIN_PERIODICITY = 1.0f
+    private const val COMPOUND_MIN_PULSE = 1.10f
+
+    // Floor for the dotted beat. Below this a grid is too coarse to practise against, so we keep
+    // the straight beat even if the evidence leans compound.
+    private const val MIN_COMPOUND_BPM = 40f
 
     /**
      * Estimate tempo and a downbeat position for [audio]. Returns null if the clip is too
@@ -115,6 +132,28 @@ object BeatDetector {
             bpm += 0.25f
         }
 
+        // Compound meter (6/8, 9/8, 12/8): the beat people count is the *dotted* note — three
+        // subdivisions long, so one and a half times the period the sweep above lands on. In 6/8 at
+        // 100 BPM the sweep reports the quarter note: a real periodicity, but not one anyone taps
+        // to, and a grid built on it falls *between* the beats (they coincide only once a bar).
+        //
+        // Two things must both be true before we move the beat there, and on real material each
+        // catches a case the other would get wrong (a 4/4 track can have a periodic dotted lag; a
+        // 4/4 track can have a grid that collects energy at 1.5× — neither has both):
+        //   1. the dotted lag is at least as *periodic* as the beat, and
+        //   2. a grid at the dotted period collects more onset energy *per pulse* — it lands on the
+        //      strong hits rather than straddling them.
+        val straightPeriod = fps * 60f / bestBpm
+        val dottedPeriod = straightPeriod * 1.5f
+        val dottedBpm = bestBpm / 1.5f
+        if (dottedBpm >= MIN_COMPOUND_BPM &&
+            acAt(dottedPeriod) >= acAt(straightPeriod) * COMPOUND_MIN_PERIODICITY &&
+            meanPulseEnergy(env, dottedPeriod) >=
+            meanPulseEnergy(env, straightPeriod) * COMPOUND_MIN_PULSE
+        ) {
+            bestBpm = dottedBpm
+        }
+
         // Beat period in envelope samples — kept *fractional*. Stepping the phase search by a
         // rounded integer period would drift ~0.3 hop/beat off the true grid and smear the result.
         val periodHops = fps * 60f / bestBpm
@@ -150,6 +189,36 @@ object BeatDetector {
         val downbeatFrame = (bestOffset * HOP).toLong()
         val downbeatFrac = (downbeatFrame.toFloat() / audio.frameCount).coerceIn(0f, 1f)
         return BeatEstimate(bestBpm, downbeatFrac)
+    }
+
+    /**
+     * The onset energy a grid of period [period] collects **per pulse**, at whichever phase suits it
+     * best. Where the autocorrelation asks "does this period repeat?", this asks the question the
+     * user actually feels: "would a grid at this tempo land *on* the hits?" A grid that straddles
+     * them scores poorly however periodic the lag is.
+     */
+    private fun meanPulseEnergy(env: FloatArray, period: Float): Float {
+        var best = 0f
+        var offset = 0f
+        while (offset < period) {
+            var acc = 0f
+            var pulses = 0
+            var pos = offset
+            while (pos < env.size) {
+                val lo = pos.toInt()
+                val frac = pos - lo
+                acc += if (lo >= env.size - 1) env[env.size - 1]
+                else env[lo] * (1f - frac) + env[lo + 1] * frac
+                pulses++
+                pos += period
+            }
+            if (pulses > 0) {
+                val mean = acc / pulses
+                if (mean > best) best = mean
+            }
+            offset += PHASE_STEP_HOPS
+        }
+        return best
     }
 
     /**

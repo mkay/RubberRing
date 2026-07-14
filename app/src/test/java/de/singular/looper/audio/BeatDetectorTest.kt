@@ -90,6 +90,62 @@ class BeatDetectorTest {
         return DecodedAudio(pcm, 1, sampleRate, wave, peak, rms)
     }
 
+    /**
+     * A 6/8 track: eighth notes running three to a dotted beat, with a **kick** on the beat and
+     * light hats on the two eighths between — the metrical shape of every compound meter, played
+     * the way a drummer plays it.
+     *
+     * The beat has to differ from the subdivision in *content*, not merely in volume: the onset
+     * envelope is built from log-compressed spectral flux, so a click that is simply louder barely
+     * stands out, while a low thump against a high tick plainly does. (A first version of this
+     * fixture only accented the amplitude, and its beat was correctly judged no more periodic than
+     * its subdivision.)
+     */
+    private fun compoundTrack(dottedBpm: Double, seconds: Double = 12.0): DecodedAudio {
+        val totalFrames = (seconds * sampleRate).toInt()
+        val pcm = ShortArray(totalFrames)
+        val eighthFrames = 60.0 / (dottedBpm * 3) * sampleRate
+
+        // A bass line moving under the beats, so each beat brings new frequency content — which is
+        // what spectral flux keys on, and what makes the beat more than a louder subdivision.
+        val bass = doubleArrayOf(82.41, 98.0, 110.0, 87.31) // E A A F
+
+        var eighth = 0
+        var t = 0.0
+        while (t < totalFrames) {
+            val onBeat = eighth % 3 == 0
+            val start = t.toInt()
+
+            // Hats tick on every eighth; the beat also gets a kick and a fresh bass note.
+            val hits = if (onBeat) {
+                listOf(
+                    Triple(6_000.0, 0.02, 4_000),                          // hat
+                    Triple(55.0, 0.12, 14_000),                            // kick
+                    Triple(bass[(eighth / 3) % bass.size], 0.35, 9_000),   // bass note
+                )
+            } else {
+                listOf(Triple(6_000.0, 0.02, 4_000))
+            }
+
+            for ((freq, seconds, amplitude) in hits) {
+                val len = (seconds * sampleRate).toInt()
+                val decayFrames = seconds * 0.35 * sampleRate
+                for (j in 0 until len) {
+                    val idx = start + j
+                    if (idx >= totalFrames) break
+                    val s = sin(2 * PI * freq * j / sampleRate) * exp(-j / decayFrames)
+                    pcm[idx] = (pcm[idx] + (s * amplitude).toInt()).toShort().coerceAudio()
+                }
+            }
+            eighth++
+            t += eighthFrames
+        }
+
+        val wave = WaveformData(FloatArray(1), FloatArray(1), 0L, sampleRate, 1)
+        val (peak, rms) = Gain.measure(pcm)
+        return DecodedAudio(pcm, 1, sampleRate, wave, peak, rms)
+    }
+
     private fun Short.coerceAudio(): Short = toInt().coerceIn(-32_768, 32_767).toShort()
 
     private fun assertTempo(bpm: Double, tolerance: Float = 2.5f, sustainedTone: Boolean = false) {
@@ -115,6 +171,22 @@ class BeatDetectorTest {
         val error = kotlin.math.abs(est!!.bpm - 112f)
         assertTrue("detected ${est.bpm} for melodic 112 BPM (error $error)", error <= 3f)
     }
+
+    /**
+     * Compound meter (6/8): the pulse people count is the **dotted** quarter, two per bar, with the
+     * eighths running three to a beat underneath. A duple-minded detector reports the quarter note
+     * — a real periodicity, but one that falls *between* the beats, so its grid is useless. Modelled
+     * on the user's "Apache": Logic says 100 BPM 6/8, so the dotted beat is 100 / 1.5 = 66.7.
+     */
+    @Test fun detectsCompound66InSixEight() {
+        val est = BeatDetector.detect(compoundTrack(dottedBpm = 66.67))
+        assertNotNull("detector returned null for 6/8", est)
+        val error = kotlin.math.abs(est!!.bpm - 66.67f)
+        assertTrue("detected ${est.bpm} for a 6/8 track whose dotted beat is 66.7 BPM", error <= 2.5f)
+    }
+
+    /** …and the compound test must keep its hands off a plain duple track at the same tempo. */
+    @Test fun straightFourFourIsNotMistakenForCompound() = assertTempo(100.0)
 
     /** The downbeat should land on a click, not somewhere between beats. */
     @Test fun phaseLandsOnABeat() {
