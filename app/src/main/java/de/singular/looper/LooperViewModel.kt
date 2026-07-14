@@ -9,8 +9,10 @@ import androidx.lifecycle.viewModelScope
 import de.singular.looper.audio.AudioDecoder
 import de.singular.looper.audio.BeatDetector
 import de.singular.looper.audio.DecodedAudio
+import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.Metronome
+import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.audio.TimeStretch
 import de.singular.looper.audio.WaveformData
 import de.singular.looper.library.ArrangementStep
@@ -124,6 +126,14 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private val _detecting = MutableStateFlow(false)
     val detecting: StateFlow<Boolean> = _detecting.asStateFlow()
 
+    // How the open track's level is normalised, and the boost that currently implies (in dB, for
+    // the UI to show — 0 when off, and near 0 when peak mode has nothing to give).
+    private val _normalize = MutableStateFlow(NormalizeMode.OFF)
+    val normalize: StateFlow<NormalizeMode> = _normalize.asStateFlow()
+
+    private val _normalizeGainDb = MutableStateFlow(0f)
+    val normalizeGainDb: StateFlow<Float> = _normalizeGainDb.asStateFlow()
+
     // Playback speed (pitch preserved). Transient per session — reset to 1× on each load.
     private val _speed = MutableStateFlow(1f)
     val speed: StateFlow<Float> = _speed.asStateFlow()
@@ -195,6 +205,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         stretched = isStretched
         val p = LoopPlayer(pcm, channels, sampleRate)
         player = p
+        applyGain() // the new player starts at 1×; carry the track's normalization over
         if (isStretched) {
             p.setRegion(0, p.frameCount) // the whole stretched buffer *is* the loop
         } else {
@@ -380,6 +391,8 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         _arrangementActive.value = false
         _arrangementRepeat.value = false
         _countIn.value = CountInState()
+        _normalize.value = NormalizeMode.OFF
+        _normalizeGainDb.value = 0f
         _playhead.value = 0f
         _state.value = LooperUiState.Empty
     }
@@ -509,6 +522,8 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         _grid.value = BeatGridState()
         _viewport.value = Viewport(1f, 0f)
         _speed.value = 1f
+        _normalize.value = NormalizeMode.OFF
+        _normalizeGainDb.value = 0f
         tapTimes.clear()
         _state.value = LooperUiState.Loading(displayName)
     }
@@ -530,7 +545,8 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                     it.setRegion(0, it.frameCount)
                 }
                 _state.value = LooperUiState.Loaded(displayName, audio)
-                onLoaded(audio)
+                onLoaded(audio) // may restore a saved normalize mode
+                applyGain()
             },
             onFailure = { _state.value = LooperUiState.Error(it.message ?: "Unknown error") },
         )
@@ -548,6 +564,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             beatsPerBar = track.countInBeatsPerBar,
             bars = track.countInBars,
         )
+        _normalize.value = track.normalize
         val start = track.startFrac.coerceIn(0f, 1f)
         val end = track.endFrac.coerceIn(start, 1f)
         _region.value = LoopRegion(start, end)
@@ -569,6 +586,28 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             countInBeatsPerBar = ci.beatsPerBar,
             countInBars = ci.bars,
         ).also { persistTrack(it) }
+    }
+
+    // ---- Normalization ----
+
+    /**
+     * Set how the open track's playback level is normalised (the Options → Audio tab) and persist
+     * it. Takes effect immediately, mid-playback: the imported file is never touched, the gain is
+     * applied to the PCM on its way to the speaker.
+     */
+    fun setNormalize(mode: NormalizeMode) {
+        _normalize.value = mode
+        applyGain()
+        val track = currentTrack ?: return
+        currentTrack = track.copy(normalize = mode).also { persistTrack(it) }
+    }
+
+    /** Push the current mode's gain into the player; the feeder picks it up on its next chunk. */
+    private fun applyGain() {
+        val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
+        val gain = Gain.linearFor(_normalize.value, audio.peak, audio.rms)
+        _normalizeGainDb.value = Gain.linearToDb(gain)
+        player?.setGain(gain, Gain.needsSoftClip(gain, audio.peak))
     }
 
     // ---- Named loops ----

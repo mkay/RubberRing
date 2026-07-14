@@ -49,7 +49,8 @@ class BeatDetectorTest {
         }
 
         val wave = WaveformData(FloatArray(1), FloatArray(1), 0L, sampleRate, 1)
-        return DecodedAudio(pcm, 1, sampleRate, wave)
+        val (peak, rms) = Gain.measure(pcm)
+        return DecodedAudio(pcm, 1, sampleRate, wave, peak, rms)
     }
 
     /**
@@ -85,7 +86,8 @@ class BeatDetectorTest {
         }
 
         val wave = WaveformData(FloatArray(1), FloatArray(1), 0L, sampleRate, 1)
-        return DecodedAudio(pcm, 1, sampleRate, wave)
+        val (peak, rms) = Gain.measure(pcm)
+        return DecodedAudio(pcm, 1, sampleRate, wave, peak, rms)
     }
 
     private fun Short.coerceAudio(): Short = toInt().coerceIn(-32_768, 32_767).toShort()

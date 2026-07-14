@@ -5,12 +5,18 @@ package de.singular.looper.audio
  *
  * [pcm] is interleaved by channel (L,R,L,R,… for stereo). One *frame* is [channels]
  * consecutive shorts. This buffer is what [de.singular.looper.audio.LoopPlayer] loops over.
+ *
+ * [peak] and [rms] are the track's loudest sample and its average level, both as 0f..1f fractions
+ * of full scale. They are what [Gain] normalises from — measured here because the decode already
+ * walks every sample.
  */
 class DecodedAudio(
     val pcm: ShortArray,
     val channels: Int,
     val sampleRate: Int,
     val waveform: WaveformData,
+    val peak: Float,
+    val rms: Float,
 ) {
     val frameCount: Int get() = pcm.size / channels
     val durationMs: Long get() = waveform.durationMs

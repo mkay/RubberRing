@@ -131,6 +131,7 @@ fun LoopWaveform(
     gridLinesPerBeat: Int, // subdivision; every Nth line is a beat (drawn brighter)
     initialZoom: Float,
     initialOffset: Float,
+    gain: Float, // playback gain from normalization (1f = none); drawn so the boost is visible
     onViewportChange: (zoom: Float, offset: Float) -> Unit,
     onStartChange: (Float) -> Unit,
     onEndChange: (Float) -> Unit,
@@ -332,6 +333,9 @@ fun LoopWaveform(
                 if (waveform.maxima[b] > mx) mx = waveform.maxima[b]
             }
             if (mn == Float.POSITIVE_INFINITY) { mn = 0f; mx = 0f }
+            // Clamped, mirroring what the ear gets: the gain stage can't push past full scale either.
+            mn = (mn * gain).coerceIn(-1f, 1f)
+            mx = (mx * gain).coerceIn(-1f, 1f)
             val inRegion = fL >= start && fR <= end
             drawLine(
                 color = if (inRegion) colors.waveActive else colors.wave,

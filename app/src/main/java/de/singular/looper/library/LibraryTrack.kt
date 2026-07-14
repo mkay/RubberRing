@@ -1,5 +1,7 @@
 package de.singular.looper.library
 
+import de.singular.looper.audio.NormalizeMode
+
 /**
  * One imported track in the app's own library. The source file's bytes are copied into
  * app-private storage on import (see [LibraryRepository]), so this record points at a stable
@@ -44,6 +46,9 @@ data class LibraryTrack(
     // [countInBeatsPerBar] beats first. The count-in inherits the track's [bpm]; accent on beat 1.
     val countInBeatsPerBar: Int = 4,
     val countInBars: Int = 1,
+    // How the track's playback level is normalised. The stored file is never rewritten — the gain
+    // this implies is derived from the audio on each open and applied on the way to the speaker.
+    val normalize: NormalizeMode = NormalizeMode.OFF,
 ) {
     /** The name to show the user: the chosen [title] if set, otherwise the original file name. */
     val name: String get() = title?.takeIf { it.isNotBlank() } ?: displayName

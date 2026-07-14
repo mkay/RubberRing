@@ -3,6 +3,7 @@ package de.singular.looper.library
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import de.singular.looper.audio.NormalizeMode
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -213,10 +214,15 @@ class LibraryRepository(context: Context) {
                     arrangementRepeat = o.optBoolean("arrangementRepeat", false),
                     countInBeatsPerBar = o.optInt("countInBeatsPerBar", 4),
                     countInBars = o.optInt("countInBars", 1),
+                    normalize = readNormalize(o.optString("normalize")),
                 )
             }
         }.getOrDefault(emptyList())
     }
+
+    /** Records written before normalization existed (or with an unknown mode) load as OFF. */
+    private fun readNormalize(name: String?): NormalizeMode =
+        NormalizeMode.entries.firstOrNull { it.name == name } ?: NormalizeMode.OFF
 
     private fun readLoops(arr: JSONArray?): List<SavedLoop> {
         if (arr == null) return emptyList()
@@ -270,7 +276,8 @@ class LibraryRepository(context: Context) {
                     .put("arrangementActive", t.arrangementActive)
                     .put("arrangementRepeat", t.arrangementRepeat)
                     .put("countInBeatsPerBar", t.countInBeatsPerBar)
-                    .put("countInBars", t.countInBars),
+                    .put("countInBars", t.countInBars)
+                    .put("normalize", t.normalize.name),
             )
         }
         // Write to a temp file then replace, so a crash mid-write can't corrupt the index.

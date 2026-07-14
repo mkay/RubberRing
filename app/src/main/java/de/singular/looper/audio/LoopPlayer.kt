@@ -39,6 +39,17 @@ class LoopPlayer(
     /** A pending seek target, picked up by the feeder on its next iteration (-1 = none). */
     @Volatile private var pendingSeek: Int = -1
 
+    // Playback gain (1f = untouched) and whether boosting it needs the soft clipper. Set from the
+    // track's NormalizeMode; picked up by the feeder on its next chunk, so it takes effect live.
+    @Volatile private var gain: Float = 1f
+    @Volatile private var softClip: Boolean = false
+
+    /** Set the playback gain. Safe to call while playing — takes effect within a chunk (~20 ms). */
+    fun setGain(linear: Float, softClip: Boolean) {
+        this.gain = linear
+        this.softClip = softClip
+    }
+
     @Volatile private var running = false
     private var track: AudioTrack? = null
     private var feeder: Thread? = null
@@ -95,6 +106,8 @@ class LoopPlayer(
 
     private fun feedLoop(t: AudioTrack) {
         val chunkFrames = (sampleRate / 50).coerceAtLeast(256) // ~20 ms
+        // Scratch space for the gain stage; unused (and untouched) while the gain is 1×.
+        val scratch = ShortArray(chunkFrames * channels)
         var frame = positionFrame
         while (running) {
             val seek = pendingSeek
@@ -109,7 +122,13 @@ class LoopPlayer(
             val framesThisWrite = min(chunkFrames, end - frame)
             val shortOffset = frame * channels
             val shortCount = framesThisWrite * channels
-            val written = t.write(pcm, shortOffset, shortCount, AudioTrack.WRITE_NON_BLOCKING)
+            val g = gain
+            val written = if (g == 1f) {
+                t.write(pcm, shortOffset, shortCount, AudioTrack.WRITE_NON_BLOCKING)
+            } else {
+                Gain.applyInto(pcm, shortOffset, scratch, shortCount, g, softClip)
+                t.write(scratch, 0, shortCount, AudioTrack.WRITE_NON_BLOCKING)
+            }
             if (written < 0) break // error
             if (written > 0) {
                 val framesWritten = written / channels // request is frame-aligned

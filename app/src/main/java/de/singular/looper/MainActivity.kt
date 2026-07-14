@@ -115,6 +115,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -125,7 +129,9 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.singular.looper.audio.DecodedAudio
+import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
+import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.ArrangementStep
 import de.singular.looper.library.SavedLoop
@@ -933,6 +939,8 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val stretching by viewModel.stretching.collectAsStateWithLifecycle()
     val countIn by viewModel.countIn.collectAsStateWithLifecycle()
     val countingIn by viewModel.countingIn.collectAsStateWithLifecycle()
+    val normalize by viewModel.normalize.collectAsStateWithLifecycle()
+    val normalizeGainDb by viewModel.normalizeGainDb.collectAsStateWithLifecycle()
     var showArrange by remember { mutableStateOf(false) }
     var showOptions by remember { mutableStateOf(false) }
     val durationMs = audio.durationMs
@@ -1007,6 +1015,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
                 gridLinesPerBeat = grid.subdivision,
                 initialZoom = initialViewport.zoom,
                 initialOffset = initialViewport.offset,
+                gain = Gain.dbToLinear(normalizeGainDb),
                 onViewportChange = viewModel::setViewport,
                 onStartChange = viewModel::setStart,
                 onEndChange = viewModel::setEnd,
@@ -1139,6 +1148,9 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             countIn = countIn,
             bpm = grid.bpm,
             onSetCountIn = viewModel::setCountIn,
+            normalize = normalize,
+            normalizeGainDb = normalizeGainDb,
+            onSetNormalize = viewModel::setNormalize,
             onDismiss = { showOptions = false },
         )
     }
@@ -1613,8 +1625,8 @@ private fun BeatControls(
 }
 
 /**
- * The track Options bottom sheet. Tabbed so more per-track option groups can slot in later; for
- * now the only tab is Count-in. To add one, append a title to [tabs] and a branch to the `when`.
+ * The track Options bottom sheet. Tabbed so more per-track option groups can slot in later; to add
+ * one, append a title to [tabs] and a branch to the `when`.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1622,11 +1634,14 @@ private fun OptionsSheet(
     countIn: CountInState,
     bpm: Float,
     onSetCountIn: (beatsPerBar: Int, bars: Int) -> Unit,
+    normalize: NormalizeMode,
+    normalizeGainDb: Float,
+    onSetNormalize: (NormalizeMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         var tab by remember { mutableStateOf(0) }
-        val tabs = listOf("Count-in")
+        val tabs = listOf("Count-in", "Audio")
         PrimaryTabRow(selectedTabIndex = tab) {
             tabs.forEachIndexed { i, title ->
                 Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title) })
@@ -1641,6 +1656,7 @@ private fun OptionsSheet(
         ) {
             when (tab) {
                 0 -> CountInTab(countIn, bpm, onSetCountIn)
+                1 -> AudioTab(normalize, normalizeGainDb, onSetNormalize)
             }
         }
     }
@@ -1681,6 +1697,76 @@ private fun CountInTab(
             )
         }
     }
+}
+
+/**
+ * Audio settings: how this track's playback level is normalised. The imported file is never
+ * rewritten — the boost is applied on the way to the speaker, so it is free to change or undo.
+ */
+@Composable
+private fun AudioTab(
+    mode: NormalizeMode,
+    gainDb: Float,
+    onSet: (NormalizeMode) -> Unit,
+) {
+    // One line per mode, each led by its own name, so the two are easy to tell apart at a glance.
+    Text(
+        "Boost a track that was mixed too quietly.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    ModeDescription(
+        "Peak",
+        " raises it until its loudest moment is as loud as it can get, without altering the sound.",
+    )
+    ModeDescription(
+        "Loudness",
+        " goes by average level instead — it can lift a track Peak has nothing left to give, at " +
+            "the cost of easing the sharpest peaks back a little.",
+    )
+    Text("Normalize", style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            NormalizeMode.OFF to "Off",
+            NormalizeMode.PEAK to "Peak",
+            NormalizeMode.LOUDNESS to "Loudness",
+        ).forEach { (m, label) ->
+            FilterChip(
+                selected = mode == m,
+                onClick = { onSet(m) },
+                label = { Text(label) },
+                shape = ControlShape,
+            )
+        }
+    }
+    // Say what the chosen mode actually does to *this* track. Without this, a Peak normalize that
+    // finds no headroom looks like a broken button rather than an honest "nothing to gain here".
+    val boost = "%+.1f dB".format(gainDb)
+    Text(
+        when {
+            mode == NormalizeMode.OFF -> "Playing at the track's own level."
+            gainDb < 0.5f && mode == NormalizeMode.PEAK ->
+                "This track already peaks at full volume, so Peak has no headroom to use. " +
+                    "Try Loudness."
+            gainDb < 0.5f -> "This track is already at the target level."
+            else -> "Boosting this track by $boost."
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** One normalize mode explained: its name in bold, then what it does. */
+@Composable
+private fun ModeDescription(mode: String, description: String) {
+    Text(
+        buildAnnotatedString {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(mode) }
+            append(description)
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

@@ -110,7 +110,8 @@ object AudioDecoder {
             else ((pcmSize / channels).toLong() * 1000 / sampleRate.coerceAtLeast(1))
 
             val waveform = buildEnvelope(pcm, channels, bucketCount, durationMs, sampleRate)
-            return DecodedAudio(pcm, channels, sampleRate, waveform)
+            val (peak, rms) = Gain.measure(pcm)
+            return DecodedAudio(pcm, channels, sampleRate, waveform, peak, rms)
         } catch (e: DecodeException) {
             throw e
         } catch (e: Exception) {
