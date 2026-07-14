@@ -45,7 +45,9 @@ import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
@@ -91,6 +93,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDrawerState
@@ -220,6 +223,10 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     var showHelp by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showKeepAwakeInfo by remember { mutableStateOf(false) }
+    // The library's selection mode: the ids of the picked tracks (empty = not selecting). Held here
+    // rather than in LibraryContent because selecting takes over the app bar, which lives here.
+    var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var pendingDelete by remember { mutableStateOf<List<LibraryTrack>>(emptyList()) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -315,15 +322,23 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     }
 
     val inLibrary = state is LooperUiState.Empty
+    val selecting = selection.isNotEmpty()
+
+    // Keep the selection honest: drop ids that are no longer in the library (deleted, or replaced
+    // by a restore), and abandon it entirely on the way out of the library.
+    LaunchedEffect(library, inLibrary) {
+        selection = if (inLibrary) selection.intersect(library.map { it.id }.toSet()) else emptySet()
+    }
 
     // The library is the home view. Backing out of the play view returns there rather than
     // quitting; a swipe-back with the drawer open just closes the drawer. In the library with the
-    // drawer closed the handler is disabled, so back keeps its default behaviour of exiting.
-    BackHandler(enabled = drawerState.isOpen || !inLibrary) {
-        if (drawerState.isOpen) {
-            scope.launch { drawerState.close() }
-        } else {
-            viewModel.closeTrack()
+    // drawer closed and nothing selected the handler is disabled, so back keeps its default
+    // behaviour of exiting.
+    BackHandler(enabled = drawerState.isOpen || !inLibrary || selecting) {
+        when {
+            drawerState.isOpen -> scope.launch { drawerState.close() }
+            selecting -> selection = emptySet()
+            else -> viewModel.closeTrack()
         }
     }
 
@@ -350,23 +365,52 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     ) {
         Scaffold(
             topBar = {
+                // While tracks are selected the bar becomes a contextual one — count, a way out,
+                // and the delete action — tinted so the mode is obvious. Its own controls (drawer,
+                // keep-awake notice) step aside until the selection is done with.
                 TopAppBar(
+                    colors = if (selecting) {
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            titleContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            actionIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    } else {
+                        TopAppBarDefaults.topAppBarColors()
+                    },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                        if (selecting) {
+                            IconButton(onClick = { selection = emptySet() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel selection")
+                            }
+                        } else {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                            }
                         }
                     },
                     title = {
                         Text(
-                            text = currentFileName(state) ?: "Rubber Ring",
+                            text = when {
+                                selecting -> "${selection.size} selected"
+                                else -> currentFileName(state) ?: "Rubber Ring"
+                            },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     },
                     actions = {
+                        if (selecting) {
+                            IconButton(
+                                onClick = { pendingDelete = library.filter { it.id in selection } },
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete selected")
+                            }
+                        }
                         // A quiet notice that the display is being kept awake (it drains battery);
                         // tap for an explanation and a shortcut to turn it off.
-                        if (keepScreenOn) {
+                        if (keepScreenOn && !selecting) {
                             IconButton(onClick = { showKeepAwakeInfo = true }) {
                                 // No explicit tint: inherits the app bar's content colour (white on
                                 // the dark bar), matching the menu icon rather than an accent tone.
@@ -383,10 +427,15 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             when (val s = state) {
                 is LooperUiState.Empty -> LibraryContent(
                     library = library,
+                    selection = selection,
                     onImport = { openPicker() },
                     onOpen = viewModel::open,
+                    onToggleSelect = { track ->
+                        selection = if (track.id in selection) selection - track.id
+                        else selection + track.id
+                    },
                     onRename = viewModel::renameTrack,
-                    onDelete = viewModel::deleteTrack,
+                    onRequestDelete = { track -> pendingDelete = listOf(track) },
                     modifier = Modifier.padding(innerPadding),
                 )
 
@@ -420,6 +469,40 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
 
     if (showHelp) {
         QuickHelpDialog(onDismiss = { showHelp = false })
+    }
+
+    // One dialog for both delete paths — a row's own menu (one track) and the selection's bulk
+    // delete (several). There is no undo, so this is the last word before the files go.
+    if (pendingDelete.isNotEmpty()) {
+        val doomed = pendingDelete
+        val single = doomed.singleOrNull()
+        AlertDialog(
+            onDismissRequest = { pendingDelete = emptyList() },
+            title = { Text(if (single != null) "Delete track?" else "Delete ${doomed.size} tracks?") },
+            text = {
+                Text(
+                    if (single != null) {
+                        "Remove \"${single.name}\" and its saved loops from your library? " +
+                            "The original file on your device is not affected."
+                    } else {
+                        "Remove these ${doomed.size} tracks and their saved loops from your " +
+                            "library? The original files on your device are not affected."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteTracks(doomed)
+                        pendingDelete = emptyList()
+                        selection = emptySet()
+                    },
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = emptyList() }) { Text("Cancel") }
+            },
+        )
     }
 
     if (showKeepAwakeInfo) {
@@ -724,14 +807,16 @@ private fun HelpItem(title: String, body: String) {
 @Composable
 private fun LibraryContent(
     library: List<LibraryTrack>,
+    selection: Set<String>,
     onImport: () -> Unit,
     onOpen: (LibraryTrack) -> Unit,
+    onToggleSelect: (LibraryTrack) -> Unit,
     onRename: (LibraryTrack, String) -> Unit,
-    onDelete: (LibraryTrack) -> Unit,
+    onRequestDelete: (LibraryTrack) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var deleteTarget by remember { mutableStateOf<LibraryTrack?>(null) }
     var renameTarget by remember { mutableStateOf<LibraryTrack?>(null) }
+    val selecting = selection.isNotEmpty()
 
     Column(
         modifier.fillMaxSize().padding(16.dp),
@@ -780,32 +865,17 @@ private fun LibraryContent(
                 items(library, key = { it.id }) { track ->
                     LibraryRow(
                         track = track,
-                        onClick = { onOpen(track) },
+                        selected = track.id in selection,
+                        selecting = selecting,
+                        // While selecting, a tap picks rather than opens — one meaning per tap.
+                        onClick = { if (selecting) onToggleSelect(track) else onOpen(track) },
+                        onLongClick = { onToggleSelect(track) },
                         onRename = { renameTarget = track },
-                        onDelete = { deleteTarget = track },
+                        onDelete = { onRequestDelete(track) },
                     )
                 }
             }
         }
-    }
-
-    deleteTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete track?") },
-            text = {
-                Text(
-                    "Remove \"${target.name}\" and its saved loops from your library? " +
-                        "The original file on your device is not affected.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { onDelete(target); deleteTarget = null }) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
-            },
-        )
     }
 
     renameTarget?.let { target ->
@@ -850,16 +920,30 @@ private fun BackupChoiceRow(
 @Composable
 private fun LibraryRow(
     track: LibraryTrack,
+    selected: Boolean,
+    selecting: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     Surface(
-        onClick = onClick,
         shape = ControlShape,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth(),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ControlShape)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    // Confirm the grab in the hand — the gesture has no on-screen affordance.
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                },
+            ),
     ) {
         Row(
             Modifier.padding(start = 12.dp, end = 4.dp),
@@ -902,21 +986,34 @@ private fun LibraryRow(
                     }
                 }
             }
-            Box {
-                IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Track options")
+            // While selecting, the row's own menu would compete with the selection's actions, so
+            // it gives way to a tick that says whether this track is in the batch.
+            if (selecting) {
+                Box(Modifier.padding(12.dp)) {
+                    Icon(
+                        if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = if (selected) "Selected" else "Not selected",
+                        tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Rename") },
-                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                        onClick = { menu = false; onRename() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete") },
-                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                        onClick = { menu = false; onDelete() },
-                    )
+            } else {
+                Box {
+                    IconButton(onClick = { menu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Track options")
+                    }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Rename") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { menu = false; onRename() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = { menu = false; onDelete() },
+                        )
+                    }
                 }
             }
         }

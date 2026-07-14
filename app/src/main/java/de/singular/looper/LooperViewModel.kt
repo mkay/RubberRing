@@ -1053,10 +1053,13 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Delete a track from the library (removes its file + saved loops). */
-    fun deleteTrack(track: LibraryTrack) {
-        if (currentTrack?.id == track.id) currentTrack = null
+    fun deleteTrack(track: LibraryTrack) = deleteTracks(listOf(track))
+
+    /** Delete several tracks at once — the library's selection mode. Irreversible, as with one. */
+    fun deleteTracks(tracks: List<LibraryTrack>) {
+        if (tracks.any { it.id == currentTrack?.id }) currentTrack = null
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { library.remove(track) }
+            withContext(Dispatchers.IO) { library.removeAll(tracks) }
             refreshLibrary()
         }
     }

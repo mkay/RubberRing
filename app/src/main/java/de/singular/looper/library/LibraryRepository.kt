@@ -82,10 +82,17 @@ class LibraryRepository(context: Context) {
     }
 
     /** Remove a track from the index and delete its file. */
-    suspend fun remove(track: LibraryTrack) = mutex.withLock {
-        writeIndex(readIndex().filterNot { it.id == track.id })
-        runCatching { fileFor(track).delete() }
-        Unit
+    suspend fun remove(track: LibraryTrack) = removeAll(listOf(track))
+
+    /**
+     * Remove [tracks] from the index and delete their files. The index is rewritten once for the
+     * whole batch, so deleting a selection costs one write rather than one per track.
+     */
+    suspend fun removeAll(tracks: List<LibraryTrack>) = mutex.withLock {
+        if (tracks.isEmpty()) return@withLock
+        val doomed = tracks.map { it.id }.toSet()
+        writeIndex(readIndex().filterNot { it.id in doomed })
+        tracks.forEach { runCatching { fileFor(it).delete() } }
     }
 
     // ---- Backup / restore ----
