@@ -1,6 +1,6 @@
 Rubber Ring is a tool for practicing song parts. Pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop. It auto-detects tempo and beats to snap the loop markers to a beat grid, with full manual override.
 
-Early-stage release — expect rough edges. Beat detection and count-in still need improvement. Feedback and bug reports welcome via Issues.
+Early-stage release — expect rough edges. Feedback and bug reports welcome via Issues.
 
 Features:
 

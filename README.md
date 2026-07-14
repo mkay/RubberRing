@@ -5,7 +5,7 @@
 
 An Android tool for practicing song parts. Pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop — slowed down without changing pitch, and snapped to an editable beat grid. Chain loops into practice arrangements to drill transitions.
 
-Early-stage release — expect rough edges. Beat detection and count-in still need improvement. Feedback and bug reports welcome via Issues.
+Early-stage release — expect rough edges. Feedback and bug reports welcome via Issues.
 
 ## Screenshots
 
@@ -19,8 +19,7 @@ Early-stage release — expect rough edges. Beat detection and count-in still ne
 - **Waveform loop editing** — drag start/end handles to mark a section; it decodes to PCM and
   loops via `AudioTrack` loop points, so the boundary wraps with zero audible gap or click.
 - **Editable beat grid** — a dependency-free estimator finds BPM and a downbeat, and handles
-  snap to the grid. Refine it by hand: tap the tempo, nudge ±1 BPM, or halve/double to fix
-  the octave errors auto-detect is prone to.
+  snap to the grid. Refine it by hand at any time: tap the tempo, nudge ±1 BPM, or halve/double it.
 - **Pitch-preserving speed** — slow down or speed up from 0.5× to 1.5× with a WSOLA
   time-stretch that keeps the original pitch.
 - **Saved loops** — capture a region + grid per track and recall it later.
