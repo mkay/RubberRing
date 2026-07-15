@@ -71,8 +71,10 @@ app/src/main/java/de/singular/looper/
 
 If Rubber Ring is useful to you, you can support its development on [Ko-fi](https://ko-fi.com/s1ngular). Thank you!
 
-## Disclaimer
+## Disclaimer(s)
 
-This project was developed with the assistance of Claude under my direction and functional review. The code has been analysed with Codacy (detekt).
+1. This app is built around my own musical style, particularly the chords and tempos I use. While looping will work regardless of the imported audio, chord and beat detection may not work perfectly for Prog-Polka-Fusion in 7/8.
+
+2) This project was developed with the assistance of Claude under my direction and functional review. The code has been analysed with Codacy (detekt).
 
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/ddcda70adc4c442dbb9f03d9aa2f0e31)](https://app.codacy.com/gh/mkay/RubberRing/dashboard)

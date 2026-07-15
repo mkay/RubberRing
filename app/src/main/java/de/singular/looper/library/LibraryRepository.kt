@@ -3,7 +3,10 @@ package de.singular.looper.library
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import de.singular.looper.audio.Chord
+import de.singular.looper.audio.ChordSpan
 import de.singular.looper.audio.NormalizeMode
+import de.singular.looper.audio.Quality
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -222,6 +225,7 @@ class LibraryRepository(context: Context) {
                     countInBeatsPerBar = o.optInt("countInBeatsPerBar", 4),
                     countInBars = o.optInt("countInBars", 1),
                     normalize = readNormalize(o.optString("normalize")),
+                    chords = readChords(o.optJSONArray("chords")),
                 )
             }
         }.getOrDefault(emptyList())
@@ -243,6 +247,21 @@ class LibraryRepository(context: Context) {
                 bpm = o.optDouble("bpm", 120.0).toFloat(),
                 downbeatFrac = o.optDouble("downbeatFrac", 0.0).toFloat(),
                 snap = o.optBoolean("snap", false),
+            )
+        }
+    }
+
+    private fun readChords(arr: JSONArray?): List<ChordSpan> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).map { j ->
+            val o = arr.getJSONObject(j)
+            ChordSpan(
+                startFrac = o.optDouble("startFrac", 0.0).toFloat(),
+                endFrac = o.optDouble("endFrac", 1.0).toFloat(),
+                chord = Chord(
+                    root = o.optInt("root", 0),
+                    quality = Quality.entries.firstOrNull { it.name == o.optString("quality") } ?: Quality.MAJ,
+                ),
             )
         }
     }
@@ -284,7 +303,8 @@ class LibraryRepository(context: Context) {
                     .put("arrangementRepeat", t.arrangementRepeat)
                     .put("countInBeatsPerBar", t.countInBeatsPerBar)
                     .put("countInBars", t.countInBars)
-                    .put("normalize", t.normalize.name),
+                    .put("normalize", t.normalize.name)
+                    .put("chords", writeChords(t.chords)),
             )
         }
         // Write to a temp file then replace, so a crash mid-write can't corrupt the index.
@@ -303,6 +323,20 @@ class LibraryRepository(context: Context) {
                     .put("bpm", l.bpm.toDouble())
                     .put("downbeatFrac", l.downbeatFrac.toDouble())
                     .put("snap", l.snap),
+            )
+        }
+        return arr
+    }
+
+    private fun writeChords(spans: List<ChordSpan>): JSONArray {
+        val arr = JSONArray()
+        spans.forEach { s ->
+            arr.put(
+                JSONObject()
+                    .put("startFrac", s.startFrac.toDouble())
+                    .put("endFrac", s.endFrac.toDouble())
+                    .put("root", s.chord.root)
+                    .put("quality", s.chord.quality.name),
             )
         }
         return arr

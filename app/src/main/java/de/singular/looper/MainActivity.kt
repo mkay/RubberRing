@@ -134,7 +134,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
+import de.singular.looper.audio.Chord
 import de.singular.looper.audio.NormalizeMode
+import de.singular.looper.audio.Quality
 import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.ArrangementStep
 import de.singular.looper.library.SavedLoop
@@ -1025,6 +1027,10 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val region by viewModel.region.collectAsStateWithLifecycle()
     val playhead by viewModel.playhead.collectAsStateWithLifecycle()
     val grid by viewModel.grid.collectAsStateWithLifecycle()
+    val chords by viewModel.chords.collectAsStateWithLifecycle()
+    val currentChord by viewModel.currentChord.collectAsStateWithLifecycle()
+    val chordEditMode by viewModel.chordEditMode.collectAsStateWithLifecycle()
+    val showChords by viewModel.showChords.collectAsStateWithLifecycle()
     val detecting by viewModel.detecting.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val loops by viewModel.savedLoops.collectAsStateWithLifecycle()
@@ -1040,6 +1046,8 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val normalizeGainDb by viewModel.normalizeGainDb.collectAsStateWithLifecycle()
     var showArrange by remember { mutableStateOf(false) }
     var showOptions by remember { mutableStateOf(false) }
+    // (spanIndex, tappedFrac) of the chord being edited; non-null shows the chord picker.
+    var chordEdit by remember { mutableStateOf<Pair<Int, Float>?>(null) }
     val durationMs = audio.durationMs
 
     // Once the arrangement is enabled, the Play button runs the sequence — so the single-loop and
@@ -1091,6 +1099,9 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         val gestureInsets = WindowInsets.systemGestures.asPaddingValues()
         val layoutDirection = LocalLayoutDirection.current
         val inset = if (edgeInset) EDGE_INSET_FRACTION else 0f
+        if (chordEditMode) {
+            ChordEditBar(onDone = { viewModel.setChordEditMode(false) })
+        }
         Box(
             Modifier
                 .fillMaxWidth()
@@ -1110,6 +1121,14 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
                 gridOffsetFrac = grid.downbeatFrac,
                 gridIntervalFrac = if (grid.enabled) intervalFrac else 0f,
                 gridLinesPerBeat = grid.subdivision,
+                chords = if (showChords) chords?.spans ?: emptyList() else emptyList(),
+                chordEditMode = chordEditMode && showChords,
+                onChordTap = { index, frac -> chordEdit = index to frac },
+                onChordBoundaryMove = viewModel::moveChordBoundary,
+                onChordAdd = { frac ->
+                    val i = viewModel.addChordAt(frac)
+                    if (i >= 0) chordEdit = i to frac // open the picker on the new chord
+                },
                 initialZoom = initialViewport.zoom,
                 initialOffset = initialViewport.offset,
                 gain = Gain.dbToLinear(normalizeGainDb),
@@ -1149,6 +1168,24 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             TimeLabel("Start", (region.startFrac * durationMs).toLong())
             TimeLabel("Loop", ((region.endFrac - region.startFrac) * durationMs).toLong())
             TimeLabel("End", (region.endFrac * durationMs).toLong())
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // At-a-glance readout of the chord under the playhead — the lane on the waveform shows the
+        // whole timeline; this stays visible when zoomed in and a lane label is scrolled off. Height
+        // is reserved so the transport doesn't shift as chords come and go (or before analysis lands).
+        if (showChords) {
+            Box(Modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.Center) {
+                val name = currentChord?.name.orEmpty()
+                if (name.isNotEmpty()) {
+                    Text(
+                        name,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -1248,7 +1285,25 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             normalize = normalize,
             normalizeGainDb = normalizeGainDb,
             onSetNormalize = viewModel::setNormalize,
+            showChords = showChords,
+            onSetShowChords = viewModel::setShowChords,
+            chordEditMode = chordEditMode,
+            hasChords = (chords?.spans?.isNotEmpty() == true),
+            onSetChordEditMode = viewModel::setChordEditMode,
+            onReDetectChords = viewModel::reDetectChords,
             onDismiss = { showOptions = false },
+        )
+    }
+
+    chordEdit?.let { (index, frac) ->
+        ChordPickerDialog(
+            current = chords?.spans?.getOrNull(index)?.chord,
+            canMerge = index < (chords?.spans?.size ?: 0) - 1,
+            onSet = { viewModel.setChordAt(index, it); chordEdit = null },
+            onClear = { viewModel.setChordAt(index, Chord.NONE); chordEdit = null },
+            onSplit = { viewModel.splitChordAt(index, frac); chordEdit = null },
+            onMerge = { viewModel.mergeChordWithNext(index); chordEdit = null },
+            onDismiss = { chordEdit = null },
         )
     }
 }
@@ -1734,11 +1789,17 @@ private fun OptionsSheet(
     normalize: NormalizeMode,
     normalizeGainDb: Float,
     onSetNormalize: (NormalizeMode) -> Unit,
+    showChords: Boolean,
+    onSetShowChords: (Boolean) -> Unit,
+    chordEditMode: Boolean,
+    hasChords: Boolean,
+    onSetChordEditMode: (Boolean) -> Unit,
+    onReDetectChords: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         var tab by remember { mutableStateOf(0) }
-        val tabs = listOf("Count-in", "Audio")
+        val tabs = listOf("Count-in", "Audio", "Chords")
         PrimaryTabRow(selectedTabIndex = tab) {
             tabs.forEachIndexed { i, title ->
                 Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title) })
@@ -1754,8 +1815,133 @@ private fun OptionsSheet(
             when (tab) {
                 0 -> CountInTab(countIn, bpm, onSetCountIn)
                 1 -> AudioTab(normalize, normalizeGainDb, onSetNormalize)
+                2 -> ChordsTab(showChords, onSetShowChords, chordEditMode, hasChords, onSetChordEditMode, onReDetectChords)
             }
         }
+    }
+}
+
+/** Inline banner shown while chord editing, so it can be turned off without reopening Options. */
+@Composable
+private fun ChordEditBar(onDone: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .clip(ControlShape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+            .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Editing chords — tap to relabel or split; drag a boundary to move",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onDone) { Text("Done") }
+    }
+}
+
+/** Pick a chord for a lane span: root × quality, plus clear / split / merge actions. */
+@Composable
+private fun ChordPickerDialog(
+    current: Chord?,
+    canMerge: Boolean,
+    onSet: (Chord) -> Unit,
+    onClear: () -> Unit,
+    onSplit: () -> Unit,
+    onMerge: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val roots = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+    var root by remember { mutableStateOf(current?.root ?: 0) }
+    var quality by remember {
+        mutableStateOf(current?.quality?.takeIf { it != Quality.NONE } ?: Quality.MAJ)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Chord") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Root", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    roots.forEachIndexed { i, name ->
+                        FilterChip(
+                            selected = root == i,
+                            onClick = { root = i },
+                            label = { Text(name) },
+                            shape = ControlShape,
+                        )
+                    }
+                }
+                Text("Quality", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(
+                        Quality.MAJ to "Maj",
+                        Quality.MIN to "Min",
+                        Quality.MAJ7 to "Maj7",
+                        Quality.MIN7 to "m7",
+                    ).forEach { (q, lbl) ->
+                        FilterChip(
+                            selected = quality == q,
+                            onClick = { quality = q },
+                            label = { Text(lbl) },
+                            shape = ControlShape,
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onClear) { Text("Clear") }
+                    TextButton(onClick = onSplit) { Text("Split") }
+                    if (canMerge) TextButton(onClick = onMerge) { Text("Merge") }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSet(Chord(root, quality)) }) { Text("Set") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Chord-lane settings: show/hide the lane, turn on editing, and re-detect (discarding hand edits). */
+@Composable
+private fun ChordsTab(
+    showChords: Boolean,
+    onSetShowChords: (Boolean) -> Unit,
+    editMode: Boolean,
+    hasChords: Boolean,
+    onSetEditMode: (Boolean) -> Unit,
+    onReDetect: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text("Show chord lane", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Detect and display chords over the waveform. Turn off to hide them entirely.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = showChords, onCheckedChange = onSetShowChords)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text("Edit chords", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Tap a chord in the lane to relabel or split it; long-press a boundary to drag it (snaps to the beat).",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = editMode, onCheckedChange = onSetEditMode, enabled = showChords)
+    }
+    Text(
+        "Your edits are saved with the track and restored when you reopen it.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    TextButton(onClick = onReDetect, enabled = showChords && hasChords) {
+        Text("Re-detect chords (discard edits)")
     }
 }
 

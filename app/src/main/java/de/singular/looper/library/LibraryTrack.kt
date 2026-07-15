@@ -1,5 +1,6 @@
 package de.singular.looper.library
 
+import de.singular.looper.audio.ChordSpan
 import de.singular.looper.audio.NormalizeMode
 
 /**
@@ -49,6 +50,10 @@ data class LibraryTrack(
     // How the track's playback level is normalised. The stored file is never rewritten — the gain
     // this implies is derived from the audio on each open and applied on the way to the speaker.
     val normalize: NormalizeMode = NormalizeMode.OFF,
+    // The user's hand-edited chord timeline. Empty means "not edited": chords are recomputed on
+    // each open (and benefit from detector improvements). Once the user corrects a chord, the whole
+    // timeline is stored here and used verbatim on reopen, until they re-detect.
+    val chords: List<ChordSpan> = emptyList(),
 ) {
     /** The name to show the user: the chosen [title] if set, otherwise the original file name. */
     val name: String get() = title?.takeIf { it.isNotBlank() } ?: displayName

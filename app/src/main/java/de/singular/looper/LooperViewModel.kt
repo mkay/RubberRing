@@ -8,11 +8,18 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.singular.looper.audio.AudioDecoder
 import de.singular.looper.audio.BeatDetector
+import de.singular.looper.audio.BeatEstimate
+import de.singular.looper.audio.Chord
+import de.singular.looper.audio.ChordDetector
+import de.singular.looper.audio.ChordEdits
+import de.singular.looper.audio.ChordSpan
+import de.singular.looper.audio.ChordTrack
 import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.Metronome
 import de.singular.looper.audio.NormalizeMode
+import de.singular.looper.audio.Quality
 import de.singular.looper.audio.TimeStretch
 import de.singular.looper.audio.WaveformData
 import de.singular.looper.library.ArrangementStep
@@ -58,9 +65,13 @@ private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
 private const val KEY_SAVE_ZOOM = "save_zoom"
 private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_EDGE_INSET = "edge_inset"
+private const val KEY_SHOW_CHORDS = "show_chords"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
+
+/** Smallest a chord span may be squeezed to when editing boundaries (as a fraction of the file). */
+private const val CHORD_MIN_WIDTH = 0.003f
 
 /** The selected loop region as fractions (0f..1f) of the whole file. */
 data class LoopRegion(val startFrac: Float, val endFrac: Float)
@@ -125,6 +136,21 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _detecting = MutableStateFlow(false)
     val detecting: StateFlow<Boolean> = _detecting.asStateFlow()
+
+    // Precomputed chord timeline for the open track (null until analysis finishes). Recomputed on
+    // every open — not persisted — exactly like the tempo estimate.
+    private val _chords = MutableStateFlow<ChordTrack?>(null)
+    val chords: StateFlow<ChordTrack?> = _chords.asStateFlow()
+
+    // The chord under the playhead right now, or null when none is detected there. Drives the
+    // at-a-glance label; the lane draws the whole timeline from [chords].
+    val currentChord: StateFlow<Chord?> = combine(_playhead, _chords) { ph, track ->
+        track?.spans?.firstOrNull { ph >= it.startFrac && ph < it.endFrac }?.chord
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // Whether the chord lane is in edit mode (handles shown, taps/drags edit). Transient per session.
+    private val _chordEditMode = MutableStateFlow(false)
+    val chordEditMode: StateFlow<Boolean> = _chordEditMode.asStateFlow()
 
     // How the open track's level is normalised, and the boost that currently implies (in dB, for
     // the UI to show — 0 when off, and near 0 when peak mode has nothing to give).
@@ -286,6 +312,17 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit { putBoolean(KEY_EDGE_INSET, _edgeInset.value) }
     }
 
+    // Whether the chord lane is shown at all. Off hides the lane (and the current-chord readout) for
+    // anyone who doesn't want chord detection. A global preference, like the toggles above.
+    private val _showChords = MutableStateFlow(prefs.getBoolean(KEY_SHOW_CHORDS, true))
+    val showChords: StateFlow<Boolean> = _showChords.asStateFlow()
+
+    fun setShowChords(on: Boolean) {
+        _showChords.value = on
+        prefs.edit { putBoolean(KEY_SHOW_CHORDS, on) }
+        if (!on) _chordEditMode.value = false // editing a hidden lane makes no sense
+    }
+
     private val _themeMode = MutableStateFlow(readThemeMode(prefs.getString(KEY_THEME_MODE, null)))
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
@@ -356,6 +393,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         .put(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
         .put(KEY_SAVE_ZOOM, _saveZoom.value)
         .put(KEY_EDGE_INSET, _edgeInset.value)
+        .put(KEY_SHOW_CHORDS, _showChords.value)
         .put(KEY_THEME_MODE, _themeMode.value.name)
         .toString()
 
@@ -365,12 +403,14 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (o.has(KEY_KEEP_SCREEN_ON)) _keepScreenOn.value = o.getBoolean(KEY_KEEP_SCREEN_ON)
         if (o.has(KEY_SAVE_ZOOM)) _saveZoom.value = o.getBoolean(KEY_SAVE_ZOOM)
         if (o.has(KEY_EDGE_INSET)) _edgeInset.value = o.getBoolean(KEY_EDGE_INSET)
+        if (o.has(KEY_SHOW_CHORDS)) _showChords.value = o.getBoolean(KEY_SHOW_CHORDS)
         if (o.has(KEY_THEME_MODE)) _themeMode.value = readThemeMode(o.getString(KEY_THEME_MODE))
         prefs.edit {
             putBoolean(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
             putBoolean(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
             putBoolean(KEY_SAVE_ZOOM, _saveZoom.value)
             putBoolean(KEY_EDGE_INSET, _edgeInset.value)
+            putBoolean(KEY_SHOW_CHORDS, _showChords.value)
             putString(KEY_THEME_MODE, _themeMode.value.name)
         }
     }
@@ -379,6 +419,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private fun discardOpenTrack() {
         loadJob?.cancel()
         detectJob?.cancel()
+        chordJob?.cancel()
+        _chords.value = null
+        _chordEditMode.value = false
         stretchJob?.cancel()
         _stretching.value = false
         stretched = false
@@ -405,6 +448,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private var loadJob: Job? = null
     private var tickerJob: Job? = null
     private var detectJob: Job? = null
+    private var chordJob: Job? = null
     private var stretchJob: Job? = null
     private var arrangementJob: Job? = null
 
@@ -495,6 +539,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 _viewport.value = if (_saveZoom.value) Viewport(opened.zoom, opened.offset)
                 else Viewport(1f, 0f)
                 applyLoop(opened, audio) // restore markers + grid instead of re-detecting
+                detectChords(audio) // segment against the just-restored grid (beat-synchronous)
             }
             withContext(Dispatchers.IO) { library.add(opened) }
             refreshLibrary()
@@ -505,6 +550,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private fun startLoad(displayName: String?) {
         loadJob?.cancel()
         detectJob?.cancel()
+        chordJob?.cancel()
+        _chords.value = null
+        _chordEditMode.value = false
         stretchJob?.cancel()
         _detecting.value = false
         _stretching.value = false
@@ -774,7 +822,95 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 resnapRegion()
             }
             _detecting.value = false
+            // Chords segment against the beat grid, so (re)run them once the tempo is settled.
+            detectChords(target)
         }
+    }
+
+    /**
+     * Analyse the loaded audio for a chord timeline in the background, publishing into [chords]
+     * when it lands. Mirrors [detectBeats]: off the main thread, newest run wins, and playback
+     * never waits on it. Result is not persisted — it is recomputed on each open.
+     */
+    private fun detectChords(audio: DecodedAudio) {
+        chordJob?.cancel()
+        // A hand-edited timeline is user-owned: use it verbatim and never overwrite it with a fresh
+        // analysis (an unedited track has an empty list here and is analysed normally).
+        val saved = currentTrack?.chords ?: emptyList()
+        if (saved.isNotEmpty()) {
+            _chords.value = ChordTrack(saved)
+            return
+        }
+        _chords.value = null
+        // Feed the current grid so segmentation is beat-synchronous when a tempo is set; the
+        // detector falls back to frame-level on its own if the beat estimate is missing/implausible.
+        val g = _grid.value
+        val beat = if (g.enabled && g.bpm > 0f) BeatEstimate(g.bpm, g.downbeatFrac) else null
+        chordJob = viewModelScope.launch {
+            val track = withContext(Dispatchers.Default) { ChordDetector.detect(audio, beat) }
+            _chords.value = track
+        }
+    }
+
+    // ---- Chord editing ----
+
+    fun setChordEditMode(on: Boolean) { _chordEditMode.value = on }
+
+    private fun currentSpans(): List<ChordSpan> = _chords.value?.spans ?: emptyList()
+
+    /** Apply an edited timeline: update the lane and persist it to the track (marks it user-owned). */
+    private fun commitChords(spans: List<ChordSpan>) {
+        _chords.value = ChordTrack(spans)
+        val track = currentTrack ?: return
+        val updated = track.copy(chords = spans)
+        currentTrack = updated
+        persistTrack(updated)
+    }
+
+    private fun durationMs(): Long? = (state.value as? LooperUiState.Loaded)?.audio?.durationMs
+
+    /** Relabel the span at [index]; a NONE chord clears it (leaves a gap). */
+    fun setChordAt(index: Int, chord: Chord) =
+        commitChords(ChordEdits.relabel(currentSpans(), index, chord))
+
+    /** Move the boundary between spans [index] and [index] + 1, snapped to the beat grid. */
+    fun moveChordBoundary(index: Int, frac: Float) {
+        val dur = durationMs() ?: return
+        commitChords(ChordEdits.moveBoundary(currentSpans(), index, snapFrac(frac, dur), CHORD_MIN_WIDTH))
+    }
+
+    /** Split the span at [index] at [frac] (snapped) into two spans of the same chord. */
+    fun splitChordAt(index: Int, frac: Float) {
+        val dur = durationMs() ?: return
+        commitChords(ChordEdits.split(currentSpans(), index, snapFrac(frac, dur), CHORD_MIN_WIDTH))
+    }
+
+    /** Merge the span at [index] with the following one. */
+    fun mergeChordWithNext(index: Int) =
+        commitChords(ChordEdits.merge(currentSpans(), index))
+
+    /**
+     * Add a chord filling the empty gap at [frac] (default C major, to be relabelled). Returns the
+     * new span's index so the caller can open the picker on it, or -1 if nothing was inserted.
+     */
+    fun addChordAt(frac: Float): Int {
+        val spans = currentSpans()
+        val updated = ChordEdits.insertAt(spans, frac, Chord(0, Quality.MAJ), CHORD_MIN_WIDTH)
+        if (updated.size == spans.size) return -1
+        val newIndex = updated.indexOfFirst { span -> spans.none { it === span } }
+        commitChords(updated)
+        return newIndex
+    }
+
+    /** Discard hand edits for this track and recompute the chords from scratch. */
+    fun reDetectChords() {
+        val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
+        currentTrack?.takeIf { it.chords.isNotEmpty() }?.let {
+            val cleared = it.copy(chords = emptyList())
+            currentTrack = cleared
+            persistTrack(cleared)
+        }
+        detectChords(audio) // saved list is now empty, so this runs a fresh analysis
     }
 
     fun setStart(frac: Float) = updateRegion(newStart = frac)
@@ -1036,6 +1172,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         flushLoopState()
         loadJob?.cancel()
         detectJob?.cancel()
+        chordJob?.cancel()
+        _chords.value = null
+        _chordEditMode.value = false
         stretchJob?.cancel()
         _stretching.value = false
         stretched = false
@@ -1076,6 +1215,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         tickerJob?.cancel()
         detectJob?.cancel()
+        chordJob?.cancel()
         stretchJob?.cancel()
         arrangementJob?.cancel()
         countInJob?.cancel()

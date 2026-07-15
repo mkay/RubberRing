@@ -24,11 +24,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import de.singular.looper.audio.ChordSpan
 import de.singular.looper.audio.WaveformData
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
@@ -52,6 +58,8 @@ private class WaveformColors(
     val minimapWindow: Color,
     val gridLine: Color,
     val downbeatLine: Color,
+    val chordLaneBg: Color, // scrim behind the chord lane so names stay readable over the wave
+    val chordText: Color,   // chord name
 )
 
 private val DarkWaveformColors = WaveformColors(
@@ -65,6 +73,8 @@ private val DarkWaveformColors = WaveformColors(
     minimapWindow = Color(0xB3FFFFFF),
     gridLine = Color(0x22FFFFFF),
     downbeatLine = Color(0x55FFFFFF),
+    chordLaneBg = Color(0x73101418),
+    chordText = Color(0xFFE8EAED),
 )
 
 private val LightWaveformColors = WaveformColors(
@@ -79,9 +89,19 @@ private val LightWaveformColors = WaveformColors(
     minimapWindow = Color(0x99000000),
     gridLine = Color(0x12000000),
     downbeatLine = Color(0x38000000),
+    chordLaneBg = Color(0x73FFFFFF),
+    chordText = Color(0xFF121418),
 )
 
 private const val MAX_ZOOM = 80f
+
+// The chord lane only appears once the visible window is this short — zoomed further out, most
+// chords are too narrow to label and a sparse, half-filled lane just reads as clutter.
+private const val CHORD_LANE_MAX_VISIBLE_SEC = 18f
+
+// Chord lane band height: normal (display) vs. edit mode (taller, to fit boundary grips).
+private val CHORD_LANE_HEIGHT = 22.dp
+private val CHORD_LANE_EDIT_HEIGHT = 34.dp
 
 // Hold this long on a marker (finger still) to grab it, so a marker can't be nudged by accident.
 private const val LONG_PRESS_MS = 450L
@@ -92,6 +112,8 @@ private const val HANDLE_END = 2
 private const val PAN = 3
 private const val PLAYHEAD = 4
 private const val SCROLLBAR = 5
+private const val CHORD_BOUNDARY = 6
+private const val CHORD_ADD = 7
 
 // Height of the bottom scroll strip (the minimap). Its touch band is taller for easy grabbing.
 private val SCROLLBAR_HEIGHT = 18.dp
@@ -129,6 +151,7 @@ fun LoopWaveform(
     gridOffsetFrac: Float,
     gridIntervalFrac: Float, // 0 = no grid
     gridLinesPerBeat: Int, // subdivision; every Nth line is a beat (drawn brighter)
+    chords: List<ChordSpan>, // detected chord timeline; empty until analysis lands
     initialZoom: Float,
     initialOffset: Float,
     gain: Float, // playback gain from normalization (1f = none); drawn so the boost is visible
@@ -138,18 +161,36 @@ fun LoopWaveform(
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
     onMarkerGrabbed: () -> Unit = {},
+    chordEditMode: Boolean = false, // when true the lane is taller and accepts tap/drag edits
+    onChordTap: (index: Int, frac: Float) -> Unit = { _, _ -> }, // tapped a chord span (→ picker)
+    onChordBoundaryMove: (index: Int, frac: Float) -> Unit = { _, _ -> }, // dragged boundary index→frac
+    onChordAdd: (frac: Float) -> Unit = {}, // long-pressed an empty gap (→ add a chord there)
 ) {
     val start by rememberUpdatedState(startFrac)
     val end by rememberUpdatedState(endFrac)
     val playhead by rememberUpdatedState(playheadFrac)
     val seek by rememberUpdatedState(onSeek)
     val grabbed by rememberUpdatedState(onMarkerGrabbed)
+    // Edit-mode inputs mirrored so the (waveform-keyed) gesture detector sees current values.
+    val editMode by rememberUpdatedState(chordEditMode)
+    val spans by rememberUpdatedState(chords)
+    val chordTap by rememberUpdatedState(onChordTap)
+    val boundaryMove by rememberUpdatedState(onChordBoundaryMove)
+    val chordAdd by rememberUpdatedState(onChordAdd)
     val haptic = LocalHapticFeedback.current
 
     // Pick the light or dark waveform palette to match the theme actually in effect (which may
     // differ from the OS setting when the user forces a mode). The surface colour tells us which.
     val colors = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f)
         DarkWaveformColors else LightWaveformColors
+
+    // Reused across frames to draw chord names on the native canvas (Compose has no Canvas text API).
+    val chordPaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+    }
 
     // Viewport state, seeded from the caller and reset when a new file is loaded.
     var zoom by remember(waveform) { mutableFloatStateOf(initialZoom) }
@@ -232,6 +273,27 @@ fun LoopWaveform(
                 return abs(x - px) <= handleThreshold
             }
 
+            // Height of the chord-lane touch band (taller while editing).
+            fun chordLaneHeightPx() = (if (editMode) CHORD_LANE_EDIT_HEIGHT else CHORD_LANE_HEIGHT).toPx()
+
+            // Nearest draggable chord boundary (the meeting point of spans i and i+1), or -1.
+            fun chordBoundaryNear(x: Float): Int {
+                val w = size.width.toFloat()
+                var best = -1
+                var bestD = handleThreshold
+                for (i in 0 until spans.size - 1) {
+                    val d = abs(x - (spans[i].endFrac - offset) * w * zoom)
+                    if (d < bestD) { bestD = d; best = i }
+                }
+                return best
+            }
+
+            // Index of the chord span under x, or -1.
+            fun chordSpanAt(x: Float): Int {
+                val f = xToFrac(x)
+                return spans.indexOfFirst { f >= it.startFrac && f < it.endFrac }
+            }
+
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val downX = down.position.x
@@ -243,36 +305,49 @@ fun LoopWaveform(
                 var grabDx = 0f
 
                 val w0 = size.width.toFloat()
-                val inScrollbar = zoom > 1f && down.position.y >= size.height - SCROLLBAR_TOUCH.toPx()
-                val nearHandle = if (inScrollbar) NONE else handleNear(downX)
-                if (inScrollbar) {
+                // In edit mode the top band is the chord lane; taps/drags there edit chords and take
+                // priority over the marker/playhead/seek gestures below it.
+                val inChordLane = editMode && down.position.y <= chordLaneHeightPx()
+                var chordBoundaryIndex = -1
+                val inScrollbar = !inChordLane && zoom > 1f && down.position.y >= size.height - SCROLLBAR_TOUCH.toPx()
+                // While editing chords, the waveform body is inert (no marker grab / playhead scrub /
+                // seek) so fiddling with chords can't nudge the loop — only pan/zoom/scroll navigate.
+                val nearHandle = if (inScrollbar || inChordLane || editMode) NONE else handleNear(downX)
+                if (inChordLane) {
+                    val bIndex = chordBoundaryNear(downX)
+                    if (bIndex >= 0) {
+                        // Require a still hold to grab a boundary (same idiom as markers), so a tap
+                        // near a boundary still relabels rather than nudging it.
+                        if (awaitStillHold(down.id, downX, slop) == null) {
+                            mode = CHORD_BOUNDARY
+                            chordBoundaryIndex = bIndex
+                            grabDx = downX - (spans[bIndex].endFrac - offset) * w0 * zoom
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            grabbed()
+                        }
+                    } else if (chordSpanAt(downX) < 0) {
+                        // An empty gap: a still hold adds a new chord filling it.
+                        if (awaitStillHold(down.id, downX, slop) == null) {
+                            mode = CHORD_ADD // so the release below isn't treated as a tap
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            grabbed()
+                            chordAdd(xToFrac(downX))
+                        }
+                    }
+                } else if (inScrollbar) {
                     mode = SCROLLBAR // grab the scroll strip; no hold needed
                     scrollTo(downX)
                 } else if (nearHandle != NONE) {
                     // Require a still hold to arm a marker; a quick move/lift cancels and falls
                     // through (so a normal touch can't nudge a marker).
-                    val exit = withTimeoutOrNull(LONG_PRESS_MS) {
-                        var reason = 0
-                        while (reason == 0) {
-                            val e = awaitPointerEvent()
-                            val c = e.changes.firstOrNull { it.id == down.id }
-                            reason = when {
-                                c == null || !c.pressed -> LP_UP
-                                e.changes.count { it.pressed } >= 2 -> LP_MULTI
-                                abs(c.position.x - downX) > slop -> LP_MOVED
-                                else -> 0
-                            }
-                        }
-                        reason
-                    }
-                    if (exit == null) { // held still long enough → armed
+                    if (awaitStillHold(down.id, downX, slop) == null) { // held still long enough → armed
                         mode = nearHandle
                         val frac = if (nearHandle == HANDLE_START) start else end
                         grabDx = downX - (frac - offset) * w0 * zoom
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         grabbed()
                     }
-                } else if (playheadNear(downX)) {
+                } else if (!editMode && playheadNear(downX)) {
                     mode = PLAYHEAD // scrubbing the playhead needs no hold
                 }
 
@@ -297,6 +372,7 @@ fun LoopWaveform(
                             HANDLE_START -> { onStartChange(xToFrac(change.position.x - grabDx)); change.consume() }
                             HANDLE_END -> { onEndChange(xToFrac(change.position.x - grabDx)); change.consume() }
                             PLAYHEAD -> { seek(xToFrac(change.position.x)); change.consume() }
+                            CHORD_BOUNDARY -> { boundaryMove(chordBoundaryIndex, xToFrac(change.position.x - grabDx)); change.consume() }
                             SCROLLBAR -> { scrollTo(change.position.x); change.consume() }
                             PAN -> { applyPan(dx); change.consume() }
                             NONE -> if (moved) { mode = PAN; applyPan(dx); change.consume() }
@@ -304,10 +380,15 @@ fun LoopWaveform(
                     }
                 }
 
-                // A tap in open space (nothing else engaged) seeks the playhead to it.
-                // Play/stop lives on a dedicated button, not here.
+                // A tap that engaged nothing: in the chord lane it opens the picker for the tapped
+                // span; elsewhere it seeks the playhead. Play/stop lives on a dedicated button.
                 if (!moved && !multiTouch && mode == NONE) {
-                    seek(xToFrac(downX))
+                    if (inChordLane) {
+                        val si = chordSpanAt(downX)
+                        if (si >= 0) chordTap(si, xToFrac(downX))
+                    } else if (!editMode) {
+                        seek(xToFrac(downX))
+                    }
                 }
             }
         },
@@ -378,6 +459,46 @@ fun LoopWaveform(
         fracToX(start).let { if (it in 0f..w) drawHandle(it, h, towardRight = true, colors) }
         fracToX(end).let { if (it in 0f..w) drawHandle(it, h, towardRight = false, colors) }
 
+        // Chord lane: a band across the top labelling each chord by name. Reuses the same fracToX
+        // viewport math as the beat grid, so labels track zoom/scroll for free. Shown only once the
+        // visible window is short enough to give the chords room — see CHORD_LANE_MAX_VISIBLE_SEC.
+        // No boundary line: the name's left edge marks where the chord starts, and a tick here just
+        // reads as a stray grid line.
+        val visibleSec = if (waveform.durationMs > 0) (waveform.durationMs / 1000f) / zoom else Float.MAX_VALUE
+        if (chords.isNotEmpty() && (chordEditMode || visibleSec <= CHORD_LANE_MAX_VISIBLE_SEC)) {
+            val laneH = (if (chordEditMode) CHORD_LANE_EDIT_HEIGHT else CHORD_LANE_HEIGHT).toPx()
+            val pad = 4.dp.toPx()
+            drawRect(colors.chordLaneBg, topLeft = Offset(0f, 0f), size = Size(w, laneH))
+            chordPaint.textSize = 13.sp.toPx()
+            chordPaint.color = colors.chordText.toArgb()
+            // Names sit in the upper part of the lane; in edit mode the lower part holds the grips.
+            val textZoneH = if (chordEditMode) laneH * 0.62f else laneH
+            val baseline = textZoneH / 2f - (chordPaint.descent() + chordPaint.ascent()) / 2f
+            val visSpan = 1f / zoom
+            for (span in chords) {
+                if (span.endFrac < offset || span.startFrac > offset + visSpan) continue // off-screen
+                val name = span.chord.name
+                if (name.isEmpty()) continue
+                // Pin the name to the visible left of its span (so a scrolled-in chord keeps its
+                // label), and draw it only when it fits the span's visible width.
+                val visL = fracToX(span.startFrac).coerceAtLeast(0f)
+                val visR = fracToX(span.endFrac).coerceAtMost(w)
+                if (visR - visL >= chordPaint.measureText(name) + pad * 2) {
+                    drawContext.canvas.nativeCanvas.drawText(name, visL + pad, baseline, chordPaint)
+                }
+            }
+            // Edit mode: draggable boundary grips at each chord change (the meeting of spans i, i+1).
+            if (chordEditMode) {
+                val knobR = 4.dp.toPx()
+                for (i in 0 until chords.size - 1) {
+                    val bx = fracToX(chords[i].endFrac)
+                    if (bx < 0f || bx > w) continue
+                    drawLine(colors.chordText, Offset(bx, 0f), Offset(bx, laneH), strokeWidth = 2f)
+                    drawCircle(colors.chordText, radius = knobR, center = Offset(bx, laneH - knobR))
+                }
+            }
+        }
+
         if (showPlayhead) {
             val px = fracToX(playheadFrac)
             if (px in 0f..w) drawLine(PlayheadColor, start = Offset(px, 0f), end = Offset(px, h), strokeWidth = 3f)
@@ -396,6 +517,27 @@ fun LoopWaveform(
         }
     }
 }
+
+/**
+ * Wait for the finger [id] to stay still (within [slop] of [startX]) for [LONG_PRESS_MS]. Returns
+ * null if it held that long (the caller should arm its grab), or an early-exit reason otherwise
+ * (lifted, moved, or a second finger arrived). Shared by the marker, boundary, and add gestures.
+ */
+private suspend fun AwaitPointerEventScope.awaitStillHold(id: PointerId, startX: Float, slop: Float): Int? =
+    withTimeoutOrNull(LONG_PRESS_MS) {
+        var reason = 0
+        while (reason == 0) {
+            val e = awaitPointerEvent()
+            val c = e.changes.firstOrNull { it.id == id }
+            reason = when {
+                c == null || !c.pressed -> LP_UP
+                e.changes.count { it.pressed } >= 2 -> LP_MULTI
+                abs(c.position.x - startX) > slop -> LP_MOVED
+                else -> 0
+            }
+        }
+        reason
+    }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHandle(
     x: Float,
