@@ -1,3 +1,4 @@
+• New: chord detection with a hand-editable chord lane (Options → Chords) — chords are labelled over the waveform; tap to relabel, split or merge, and drag a boundary to nudge it. Tuned to the author's own material, so hand-editing is there for the rest.
 • New: per-track audio normalization (Options → Audio) — Peak or Loudness — to even out quiet tracks. Your original file is never changed, and the waveform shows the boost.
 • New: manage the library in bulk — long-press a track to start selecting, tap more, then delete them in one action.
 • Fixed: beat detection now snaps to the felt beat on compound-meter (6/8 and similar) tracks instead of landing between the beats.

@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format is based on 
 ## [0.6] - 2026-07-15
 
 ### Added
+- Chord detection with a hand-editable chord lane — a dependency-free estimator labels the chords over the waveform (Options → Chords). Tap a chord to relabel, split or merge it, and drag a boundary to nudge it (it snaps to the beat); your edits are saved with the track. Turn the lane off entirely if you don't want it. Detection is tuned to the author's own material and won't be right on every recording — hence the hand-editing.
 - Per-track audio normalization (Options → Audio) — even out quiet tracks. Choose Peak (a classic normalize, provably without distortion) or Loudness (targets a set level with a gentle limiter); off by default. Your imported file is never rewritten, and the waveform is drawn through the same gain so the boost is visible.
 - Manage the library in bulk — long-press a track to start a selection, tap to add more, then delete them all in one action (the confirmation names the count).
 
