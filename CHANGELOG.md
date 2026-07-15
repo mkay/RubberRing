@@ -1,84 +1,70 @@
 # Changelog
 
-All notable changes to this project are documented here. The format is based on
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
-to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.6] - 2026-07-15
+
+### Added
+- Per-track audio normalization (Options → Audio) — even out quiet tracks. Choose Peak (a classic normalize, provably without distortion) or Loudness (targets a set level with a gentle limiter); off by default. Your imported file is never rewritten, and the waveform is drawn through the same gain so the boost is visible.
+- Manage the library in bulk — long-press a track to start a selection, tap to add more, then delete them all in one action (the confirmation names the count).
+
+### Fixed
+- Beat detection on compound meters (6/8 and similar): the grid now lands on the felt, dotted-note beat instead of falling between the beats.
+
+### Known issues
+- The count-in's handoff to playback can still sit slightly off the beat, most noticeably at fast tempos. It's next on the agenda; BPM, beat grid and markers can all be corrected by hand in the meantime.
 
 ## [0.5] - 2026-07-13
 
 ### Added
-- Count-in — long-press Play to start after a metronome counts you in at the
-  track's tempo. Its meter (2/3/4/6 beats per bar) and length (1 or 2 bars) are
-  set per track under Options, and travel with the track.
-- A hint over the waveform on every track you open, pointing out that markers are
-  moved with a long-press — the one gesture nothing on screen could show.
-- "Add padding to waveform" (Settings → Playback, on by default) — turn the new
-  edge padding off to get the full waveform width back.
+- Count-in — long-press Play to start after a metronome counts you in at the track's tempo. Its meter (2/3/4/6 beats per bar) and length (1 or 2 bars) are set per track under Options, and travel with the track.
+- A hint over the waveform on every track you open, pointing out that markers are moved with a long-press — the one gesture nothing on screen could show.
+- "Add padding to waveform" (Settings → Playback, on by default) — turn the new edge padding off to get the full waveform width back.
 - Quick help now mentions that a long-press on Play starts with a count-in.
 
 ### Changed
-- Options and Arrange open as bottom sheets instead of popups, so they get the
-  room they need and dismiss with a swipe.
+- Options and Arrange open as bottom sheets instead of popups, so they get the room they need and dismiss with a swipe.
 - The BPM octave menu lists Double above Halve.
-- The "Keep screen on" icon is now a brightness-alert symbol instead of a lightbulb,
-  which read as a light/dark-mode toggle.
+- The "Keep screen on" icon is now a brightness-alert symbol instead of a lightbulb, which read as a light/dark-mode toggle.
 
 ### Fixed
-- Loop markers parked at the very start or end of the waveform sat on top of
-  Android's back-gesture strip, so trying to drag one left the app instead of
-  moving the marker. The waveform now holds back from the gesture strips.
+- Loop markers parked at the very start or end of the waveform sat on top of Android's back-gesture strip, so trying to drag one left the app instead of moving the marker. The waveform now holds back from the gesture strips.
 
 ### Known issues
-- Beat detection still misreads the tempo on many real recordings, and the
-  count-in's handoff to playback can sit slightly off the beat, most noticeably at
-  fast tempos. Both are next on the agenda; BPM, beat grid and markers can all be
-  corrected by hand in the meantime.
+- Beat detection still misreads the tempo on many real recordings, and the count-in's handoff to playback can sit slightly off the beat, most noticeably at fast tempos. Both are next on the agenda; BPM, beat grid and markers can all be corrected by hand in the meantime.
 
 ## [0.4] - 2026-07-12
 
-Maintenance release: identical features to 0.3, rebuilt with clean release
-hygiene (the tagged commit now matches the published binary) so F-Droid can
-reproduce and publish it. No functional changes.
+Maintenance release: identical features to 0.3, rebuilt with clean release hygiene (the tagged commit now matches the published binary) so F-Droid can reproduce and publish it. No functional changes.
 
 ## [0.3] - 2026-07-10
 
 ### Added
-- Pitch-preserving speed control — slow down or speed up playback from 0.5× to
-  1.5× without changing pitch (hand-rolled WSOLA time-stretch, no dependencies).
-- Practice arrangements — chain saved loops into an ordered sequence, each
-  repeated a set number of times, optionally looping the whole set, for drilling
-  A–B–A transitions.
+- Pitch-preserving speed control — slow down or speed up playback from 0.5× to 1.5× without changing pitch (hand-rolled WSOLA time-stretch, no dependencies).
+- Practice arrangements — chain saved loops into an ordered sequence, each repeated a set number of times, optionally looping the whole set, for drilling A–B–A transitions.
 - A screen-kept-on indicator in the app bar.
 
 ### Changed
 - The speed control is a compact link in the beat-control row.
-- Refined the Arrange popup: the arm toggle sits beside the title as an "enabled"
-  switch, "Repeat whole sequence" is a switch, and steps have an alternating row
-  background.
-- Single-loop and grid controls (loop chips, Save, Snap/Auto/Tap/½×/2×, BPM,
-  Speed) dim while an arrangement is enabled, since they don't affect arrangement
-  playback; tapping one explains why.
-- The Arrange button uses the Material "steppers" icon and fills brand-red while
-  the arrangement is armed.
+- Refined the Arrange popup: the arm toggle sits beside the title as an "enabled" switch, "Repeat whole sequence" is a switch, and steps have an alternating row background.
+- Single-loop and grid controls (loop chips, Save, Snap/Auto/Tap/½×/2×, BPM, Speed) dim while an arrangement is enabled, since they don't affect arrangement playback; tapping one explains why.
+- The Arrange button uses the Material "steppers" icon and fills brand-red while the arrangement is armed.
 
 ## [0.2] - 2026-07-08
 
 ### Added
 - System / Light / Dark theme option, with a theme-aware waveform palette.
-- A Settings screen consolidating playback options, appearance, and library
-  backup/restore.
+- A Settings screen consolidating playback options, appearance, and library backup/restore.
 - Back up and restore the whole library — tracks and saved loops — to a file.
 - Navigation drawer available everywhere, plus a Recent tracks list.
 - One-tap ½× / 2× tempo buttons to fix octave errors in beat detection.
 
 ### Changed
-- The library is now the home screen; the back gesture returns there instead of
-  quitting the app.
+- The library is now the home screen; the back gesture returns there instead of quitting the app.
 - The library list is sorted by last opened.
-- Reworked beat detection (spectral-flux onset detection with fractional-period
-  phase); replaced the "Downbeat = start" control with the octave fix.
+- Reworked beat detection (spectral-flux onset detection with fractional-period phase); replaced the "Downbeat = start" control with the octave fix.
 - Standalone ring logo on the library screen; the app is locked to portrait.
 
 ### Fixed
@@ -87,15 +73,15 @@ reproduce and publish it. No functional changes.
 ## [0.1] - 2026-07-06
 
 ### Added
-- Initial release: pick an audio file, mark a start/stop region on its waveform,
-  and play it back in a seamless, gapless loop.
-- Automatic beat grid (dependency-free tempo + downbeat estimation) with snapping
-  and full manual override.
+- Initial release: pick an audio file, mark a start/stop region on its waveform, and play it back in a seamless, gapless loop.
+- Automatic beat grid (dependency-free tempo + downbeat estimation) with snapping and full manual override.
 - Import-and-own library: picked files are copied into app-private storage.
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.4...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.6...HEAD
+[0.6]: https://github.com/mkay/RubberRing/compare/v0.5...v0.6
+[0.5]: https://github.com/mkay/RubberRing/compare/v0.4...v0.5
 [0.4]: https://github.com/mkay/RubberRing/compare/v0.3...v0.4
 [0.3]: https://github.com/mkay/RubberRing/compare/v0.2...v0.3
 [0.2]: https://github.com/mkay/RubberRing/compare/v0.1...v0.2

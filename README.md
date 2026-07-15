@@ -13,20 +13,13 @@ Early-stage release — expect rough edges. Feedback and bug reports welcome via
 
 ## Features
 
-- **Import-and-own library** — picked files are copied into app-private storage, so loops
-  survive the original being moved or deleted. The library doubles as the home screen, with
-  recents and custom, renameable track titles.
-- **Waveform loop editing** — drag start/end handles to mark a section; it decodes to PCM and
-  loops via `AudioTrack` loop points, so the boundary wraps with zero audible gap or click.
-- **Editable beat grid** — a dependency-free estimator finds BPM and a downbeat, and handles
-  snap to the grid. Refine it by hand at any time: tap the tempo, nudge ±1 BPM, or halve/double it.
-- **Pitch-preserving speed** — slow down or speed up from 0.5× to 1.5× with a WSOLA
-  time-stretch that keeps the original pitch.
+- **Import-and-own library** — picked files are copied into app-private storage, so loops survive the original being moved or deleted. The library doubles as the home screen, with recents and custom, renameable track titles.
+- **Waveform loop editing** — drag start/end handles to mark a section; it decodes to PCM and loops via `AudioTrack` loop points, so the boundary wraps with zero audible gap or click.
+- **Editable beat grid** — a dependency-free estimator finds BPM and a downbeat, and handles snap to the grid. Refine it by hand at any time: tap the tempo, nudge ±1 BPM, or halve/double it.
+- **Pitch-preserving speed** — slow down or speed up from 0.5× to 1.5× with a WSOLA time-stretch that keeps the original pitch.
 - **Saved loops** — capture a region + grid per track and recall it later.
-- **Practice arrangements** — chain saved loops into an ordered sequence, each repeated a set
-  number of times and optionally looping the whole set — for drilling A–B–A transitions.
-- **Session comforts** — System/Light/Dark themes with a theme-aware waveform, follow-playhead auto-scroll, keep-screen-on, library backup & restore, and an in-app quick-help sheet.
-  Preferences persist across launches.
+- **Practice arrangements** — chain saved loops into an ordered sequence, each repeated a set number of times and optionally looping the whole set — for drilling A–B–A transitions.
+- **Session comforts** — System/Light/Dark themes with a theme-aware waveform, follow-playhead auto-scroll, keep-screen-on, library backup & restore, and an in-app quick-help sheet. Preferences persist across launches.
 
 ## Tech stack
 
@@ -41,8 +34,7 @@ Early-stage release — expect rough edges. Feedback and bug reports welcome via
 
 ## Building
 
-Requires a JDK (17+) and the Android SDK. Point the build at your SDK by creating a
-`local.properties` file in the project root (this file is git-ignored):
+Requires a JDK (17+) and the Android SDK. Point the build at your SDK by creating a `local.properties` file in the project root (this file is git-ignored):
 
 ```properties
 sdk.dir=/path/to/Android/Sdk
@@ -54,8 +46,7 @@ Then build a debug APK:
 ./gradlew assembleDebug
 ```
 
-The APK lands at `app/build/outputs/apk/debug/app-debug.apk`; sideload it to a device
-to run it.
+The APK lands at `app/build/outputs/apk/debug/app-debug.apk`; sideload it to a device to run it.
 
 ## Project layout
 
@@ -78,8 +69,7 @@ app/src/main/java/de/singular/looper/
 
 ## Support
 
-If Rubber Ring is useful to you, you can support its development on
-[Ko-fi](https://ko-fi.com/s1ngular). Thank you!
+If Rubber Ring is useful to you, you can support its development on [Ko-fi](https://ko-fi.com/s1ngular). Thank you!
 
 ## Disclaimer
 

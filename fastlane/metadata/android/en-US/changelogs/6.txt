@@ -1,0 +1,4 @@
+• New: per-track audio normalization (Options → Audio) — Peak or Loudness — to even out quiet tracks. Your original file is never changed, and the waveform shows the boost.
+• New: manage the library in bulk — long-press a track to start selecting, tap more, then delete them in one action.
+• Fixed: beat detection now snaps to the felt beat on compound-meter (6/8 and similar) tracks instead of landing between the beats.
+• Known issue: the count-in's handoff to playback can still sit slightly off the beat at fast tempos.
