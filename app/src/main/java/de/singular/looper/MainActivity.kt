@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -393,10 +394,12 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                         }
                     },
                     title = {
+                        // On the library home the wordmark banner already names the app, so the
+                        // corner title steps aside there; it stays on a loaded track (its filename).
                         Text(
                             text = when {
                                 selecting -> "${selection.size} selected"
-                                else -> currentFileName(state) ?: "Rubber Ring"
+                                else -> currentFileName(state) ?: ""
                             },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -806,6 +809,9 @@ private fun HelpItem(title: String, body: String) {
     }
 }
 
+/** The wordmark's width-to-height, from its 1194×230 artwork. */
+private const val CLAIM_ASPECT = 1194f / 230f
+
 @Composable
 private fun LibraryContent(
     library: List<LibraryTrack>,
@@ -834,7 +840,29 @@ private fun LibraryContent(
             contentDescription = null,
             modifier = Modifier.size(96.dp),
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
+        // The "Rubber Ring" wordmark and its claim. The wordmark is a single-colour vector — the
+        // type is already outlined to paths — so it is tinted here rather than carrying its own
+        // colour, and reads in either theme. Sized to a fixed width keeping the artwork's aspect so
+        // it never runs off a narrow phone. The claim below is live text, not more outlined paths,
+        // so it stays legible at any size and is read aloud as words; the wordmark carries no
+        // description of its own to keep the name from being spoken twice.
+        Icon(
+            painter = painterResource(R.drawable.claim),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .width(200.dp)
+                .aspectRatio(CLAIM_ASPECT),
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "a play-along looper",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(20.dp))
         Text(
             "Pick an audio file to mark and loop a section.",
             style = MaterialTheme.typography.bodyMedium,
