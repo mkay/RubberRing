@@ -9,7 +9,7 @@ Early-stage release — expect rough edges. Feedback and bug reports welcome via
 
 ## Screenshots
 
-<img src="docs/screenshot.png" alt="RubberRing home screen with wordmark and track library" width="320" />
+<img src="docs/screenshot.png" alt="RubberRing library home and the loop editor with chord lane" width="640" />
 
 ## Features
 
