@@ -9,7 +9,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -111,6 +115,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.vectorResource
@@ -452,8 +457,8 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                         is LooperUiState.Loading -> Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            CircularProgressIndicator()
-                            Spacer(Modifier.height(8.dp))
+                            RingSpinner()
+                            Spacer(Modifier.height(16.dp))
                             Text("Decoding…")
                         }
 
@@ -811,6 +816,32 @@ private fun HelpItem(title: String, body: String) {
 
 /** The wordmark's width-to-height, from its 1194×230 artwork. */
 private const val CLAIM_ASPECT = 1194f / 230f
+
+/** One full turn of the ring spinner, in milliseconds. */
+private const val SPINNER_PERIOD_MS = 1100
+
+/**
+ * The app's ring mark spun as a loading indicator, in place of a generic progress circle. It keeps
+ * its own four-tone artwork rather than tinting, so it reads as the brand mark; a linear, seamless
+ * turn makes it clear the app is working without implying a measurable amount of progress.
+ */
+@Composable
+private fun RingSpinner(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "ring-spinner")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = SPINNER_PERIOD_MS, easing = LinearEasing),
+        ),
+        label = "ring-angle",
+    )
+    Image(
+        painter = painterResource(R.drawable.spinner_ring),
+        contentDescription = null,
+        modifier = modifier.size(56.dp).rotate(angle),
+    )
+}
 
 @Composable
 private fun LibraryContent(
