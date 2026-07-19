@@ -30,6 +30,9 @@ android {
 
     buildFeatures {
         compose = true
+        // For the version shown on the About screen. Generated from the constants above only —
+        // unlike vcsInfo it embeds nothing build-specific, so it stays reproducible.
+        buildConfig = true
     }
 
     compileOptions {

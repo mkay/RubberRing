@@ -1,5 +1,6 @@
 package de.singular.looper
 
+import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -19,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
@@ -57,6 +59,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -121,9 +124,13 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -230,6 +237,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     var showKeepAwakeInfo by remember { mutableStateOf(false) }
     // The library's selection mode: the ids of the picked tracks (empty = not selecting). Held here
     // rather than in LibraryContent because selecting takes over the app bar, which lives here.
@@ -308,6 +316,13 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
         )
     }
 
+    // About sits on top of Settings, which stays open underneath — so backing out of About lands
+    // back on Settings rather than dumping you at the library.
+    if (showAbout) {
+        AboutScreen(onClose = { showAbout = false })
+        return
+    }
+
     // Settings is a full screen shown over whatever's underneath; the confirm-restore dialog and
     // backup-result toast above stay in scope, so Backup/Restore works from here too.
     if (showSettings) {
@@ -324,6 +339,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             onSelectTheme = viewModel::setThemeMode,
             onBackup = startBackup,
             onRestore = startRestore,
+            onAbout = { showAbout = true },
             onClose = { showSettings = false },
         )
         return
@@ -562,6 +578,7 @@ private fun SettingsScreen(
     onSelectTheme: (ThemeMode) -> Unit,
     onBackup: () -> Unit,
     onRestore: () -> Unit,
+    onAbout: () -> Unit,
     onClose: () -> Unit,
 ) {
     BackHandler(onBack = onClose)
@@ -620,8 +637,151 @@ private fun SettingsScreen(
                 subtitle = "Replace everything from a backup file",
                 onClick = onRestore,
             )
+
+            DrawerSectionLabel("About")
+            BackupChoiceRow(
+                icon = Icons.Default.Info,
+                title = "About this app",
+                subtitle = "Version, source code, and how to get in touch",
+                onClick = onAbout,
+            )
         }
     }
+}
+
+private const val REPO_URL = "https://github.com/mkay/RubberRing"
+private const val ISSUES_URL = "$REPO_URL/issues"
+private const val KOFI_URL = "https://ko-fi.com/s1ngular"
+
+/**
+ * About: what the app is, where it lives, and how to report a bug or chip in. Reached from
+ * Settings rather than the drawer — the drawer's bottom slot belongs to Quick help, which is
+ * what you want mid-track; this is the page you visit once out of curiosity and once when
+ * filing an issue.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun AboutScreen(onClose: () -> Unit) {
+    BackHandler(onBack = onClose)
+    val uriHandler = LocalUriHandler.current
+    val clipboard = LocalClipboardManager.current
+    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+    // versionCode rides along in the copied string: it's what pins a bug report to an exact
+    // build when a version was re-released (0.3 → 0.4 taught us that the name alone can lie).
+    val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                title = { Text("About this app") },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(Modifier.height(16.dp))
+            Image(
+                painter = painterResource(R.drawable.ic_ring),
+                contentDescription = null,
+                modifier = Modifier.size(88.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Text("Rubber Ring", style = MaterialTheme.typography.headlineSmall)
+            // Long-press to copy, mirroring the library's press-and-hold idiom. Android 13 and up
+            // pops its own clipboard confirmation, so only older versions get a toast.
+            Text(
+                "v$version",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(ControlShape)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            clipboard.setText(AnnotatedString("Rubber Ring $version"))
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                Toast
+                                    .makeText(context, "Version copied", Toast.LENGTH_SHORT)
+                                    .show()
+                            }
+                        },
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+
+            Spacer(Modifier.height(28.dp))
+            AboutSection("About") {
+                AboutBody(
+                    "I built Rubber Ring primarily for myself — maybe you'll find it just as " +
+                        "useful as I do.",
+                )
+            }
+            AboutSection("Website") {
+                AboutBody("The app lives here:")
+                AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
+            }
+            AboutSection("Bugs") {
+                AboutBody("Found a hiccup? Let me know:")
+                AboutLink(ISSUES_URL) { uriHandler.openUri(ISSUES_URL) }
+            }
+            AboutSection("Support") {
+                AboutBody("If you can, support its development:")
+                AboutLink(KOFI_URL) { uriHandler.openUri(KOFI_URL) }
+            }
+            AboutSection("License") {
+                AboutBody(
+                    "Rubber Ring is free software under the GPL-3.0. It's built with AndroidX " +
+                        "and Jetpack Compose, licensed under Apache 2.0.",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(4.dp))
+        content()
+    }
+}
+
+@Composable
+private fun AboutBody(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyMedium)
+}
+
+/** A tappable URL. Kept full-length rather than hidden behind link text so it stays readable. */
+@Composable
+private fun AboutLink(url: String, onClick: () -> Unit) {
+    Text(
+        url,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .clip(ControlShape)
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+    )
 }
 
 /**
