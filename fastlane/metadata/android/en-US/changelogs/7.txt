@@ -1,0 +1,4 @@
+• New: an About page (Settings → About this app) with the version, links to the source and issue tracker, and how to support development. Long-press the version to copy it into a bug report.
+• The home screen now leads with the Rubber Ring wordmark.
+• The ring mark spins while a track is decoding, so it's clearer the app is working.
+• Known issue: the count-in's handoff to playback can still sit slightly off the beat at fast tempos.

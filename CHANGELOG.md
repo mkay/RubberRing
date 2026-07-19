@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.7] - 2026-07-19
+
+### Added
+- An About page (Settings → About this app) — the version, where the source lives, where to report a bug, and how to support development. Long-press the version to copy it, so a bug report can name the exact build.
+
+### Changed
+- The library home is headed by the "Rubber Ring" wordmark and its "a play-along looper" tagline above the ring; the app name drops out of the corner there, since the banner already says it, and stays as the filename on an open track.
+- Decoding a track now spins the app's own ring mark instead of a generic progress circle.
+
+### Known issues
+- The count-in's handoff to playback can still sit slightly off the beat, most noticeably at fast tempos. BPM, beat grid and markers can all be corrected by hand in the meantime.
+
 ## [0.6] - 2026-07-15
 
 ### Added
@@ -80,7 +92,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.6...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.7...HEAD
+[0.7]: https://github.com/mkay/RubberRing/compare/v0.6...v0.7
 [0.6]: https://github.com/mkay/RubberRing/compare/v0.5...v0.6
 [0.5]: https://github.com/mkay/RubberRing/compare/v0.4...v0.5
 [0.4]: https://github.com/mkay/RubberRing/compare/v0.3...v0.4
