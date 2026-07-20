@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-20
+
+Maintenance release: identical features to 0.7, rebuilt with a reproducibility fix (disabled AGP's non-deterministic ART baseline-profile dex rewriting) so F-Droid's buildserver can reproduce and publish it. No functional changes.
+
 ## [0.7] - 2026-07-19
 
 ### Added
@@ -92,7 +96,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.7...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/mkay/RubberRing/compare/v0.7...v0.7.1
 [0.7]: https://github.com/mkay/RubberRing/compare/v0.6...v0.7
 [0.6]: https://github.com/mkay/RubberRing/compare/v0.5...v0.6
 [0.5]: https://github.com/mkay/RubberRing/compare/v0.4...v0.5

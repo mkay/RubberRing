@@ -1,0 +1,1 @@
+• Maintenance release: identical to 0.7, rebuilt with a reproducibility fix so F-Droid's buildserver can verify and publish it. No functional changes.
