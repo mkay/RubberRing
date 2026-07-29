@@ -16,10 +16,11 @@ Version 3 only, not "or any later version". Every source file carries
 `SPDX-License-Identifier: GPL-3.0-only` saying so.
 
 
-NAME AND ARTWORK
+ARTWORK
 
-The licence above covers the source code. It does not extend to the app's name,
-its wordmark or its icon, which are original artwork:
+The wordmark and the icon are original artwork, and are licensed separately from
+the code, under the Creative Commons Attribution 4.0 International licence
+(CC BY 4.0) — see <https://creativecommons.org/licenses/by/4.0/>:
 
   app/src/main/res/drawable/claim.xml
   app/src/main/res/drawable/ic_ring.xml
@@ -32,9 +33,22 @@ its wordmark or its icon, which are original artwork:
   fastlane/metadata/android/en-US/images/icon.png
   fastlane/metadata/android/en-US/images/featureGraphic.png
 
-Copyright (C) 2025–2026 Kreuder <mail@singular.de>. You may redistribute them as
-part of an unmodified build of this app, and reproduce them to refer to the app —
-in a review, a screenshot, a link. Any other use needs permission.
+  SPDX-License-Identifier: CC-BY-4.0
+  Copyright (C) 2025–2026 Kreuder <mail@singular.de>
 
-If you distribute a modified version, as the GPL entitles you to, give it your
-own name and your own artwork. The code is yours to fork; the identity is not.
+Use them, including commercially and in a modified form, provided you credit the
+author. A free licence rather than a reservation, deliberately: F-Droid's
+inclusion policy weighs an app's assets as well as its source, and artwork held
+back earns the NonFreeAssets flag. CC BY rather than the GPL because the GPL
+would oblige the editable SVGs to ship as the artwork's source, and they are not
+in this repository — what is committed is generated from them.
+
+
+THE NAME
+
+"Rubber Ring" is not licensed by either grant above. Give a fork its own name:
+the code is yours to take, and so is the artwork if you credit it, but two apps
+answering to one name serves nobody looking for either.
+
+Nothing here is a registered trademark, and this is not claiming to be one. It
+is a statement of what the licences do and do not cover.

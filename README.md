@@ -80,15 +80,17 @@ source file carries `SPDX-License-Identifier: GPL-3.0-only`.
 Fork it, sell it, ship it — the licence asks one thing in return: if you distribute a modified
 version, publish your source under the same licence.
 
-### Name and artwork
+### Artwork and name
 
-The licence covers the code. It does not extend to the name **Rubber Ring**, the wordmark or the
-ring icon, which are original artwork and stay under ordinary copyright — see [COPYRIGHT](COPYRIGHT)
-for the files and the terms. You may pass them along in an unmodified build and reproduce them to
-refer to the app; a modified version needs its own name and its own artwork.
+The wordmark and the ring icon are licensed separately, under **CC BY 4.0** — use them, modify them,
+sell them, as long as you credit the author. [COPYRIGHT](COPYRIGHT) lists the files. A free licence
+rather than a reservation on purpose: F-Droid weighs an app's assets as well as its source, and
+artwork held back earns the NonFreeAssets flag. CC BY rather than the GPL because the GPL would
+oblige the editable SVGs to ship as the artwork's source, and this repository holds only what is
+generated from them.
 
-Nothing here is registered as a trademark, and the reservation is not claiming to be one. It is a
-statement of what the GPL grant does and does not include.
+The **name** is not licensed by either grant — give a fork its own. Nothing here is a registered
+trademark and none of this is claiming to be one; it is a statement of what the licences cover.
 
 ## Disclaimer(s)
 
