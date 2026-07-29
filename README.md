@@ -74,23 +74,14 @@ If Rubber Ring is useful to you, you can support its development on [Ko-fi](http
 ## License
 
 GPL-3.0-**only** — version 3 of the GNU General Public License, and not "or any later version".
-The full text is in [LICENSE](LICENSE), the copyright notice in [COPYRIGHT](COPYRIGHT), and every
-source file carries `SPDX-License-Identifier: GPL-3.0-only`.
-
-Fork it, sell it, ship it — the licence asks one thing in return: if you distribute a modified
-version, publish your source under the same licence.
+The full text is in [LICENSE](LICENSE), the copyright notice in [COPYRIGHT](COPYRIGHT).
 
 ### Artwork and name
 
-The wordmark and the ring icon are licensed separately, under **CC BY 4.0** — use them, modify them,
-sell them, as long as you credit the author. [COPYRIGHT](COPYRIGHT) lists the files. A free licence
-rather than a reservation on purpose: F-Droid weighs an app's assets as well as its source, and
-artwork held back earns the NonFreeAssets flag. CC BY rather than the GPL because the GPL would
-oblige the editable SVGs to ship as the artwork's source, and this repository holds only what is
-generated from them.
+The wordmark and the ring icon are licensed separately, under **CC BY 4.0**.
+[COPYRIGHT](COPYRIGHT) lists the files.
 
-The **name** is not licensed by either grant — give a fork its own. Nothing here is a registered
-trademark and none of this is claiming to be one; it is a statement of what the licences cover.
+The **name** is not licensed by either grant — give a fork its own.
 
 ## Disclaimer(s)
 
