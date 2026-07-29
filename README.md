@@ -71,6 +71,25 @@ app/src/main/java/de/singular/looper/
 
 If Rubber Ring is useful to you, you can support its development on [Ko-fi](https://ko-fi.com/s1ngular). Thank you!
 
+## License
+
+GPL-3.0-**only** — version 3 of the GNU General Public License, and not "or any later version".
+The full text is in [LICENSE](LICENSE), the copyright notice in [COPYRIGHT](COPYRIGHT), and every
+source file carries `SPDX-License-Identifier: GPL-3.0-only`.
+
+Fork it, sell it, ship it — the licence asks one thing in return: if you distribute a modified
+version, publish your source under the same licence.
+
+### Name and artwork
+
+The licence covers the code. It does not extend to the name **Rubber Ring**, the wordmark or the
+ring icon, which are original artwork and stay under ordinary copyright — see [COPYRIGHT](COPYRIGHT)
+for the files and the terms. You may pass them along in an unmodified build and reproduce them to
+refer to the app; a modified version needs its own name and its own artwork.
+
+Nothing here is registered as a trademark, and the reservation is not claiming to be one. It is a
+statement of what the GPL grant does and does not include.
+
 ## Disclaimer(s)
 
 1. This app is built around my own musical style, particularly the chords and tempi I use. While looping will work regardless of the imported audio, chord and beat detection may not work perfectly for Prog-Polka-Fusion in 7/8.

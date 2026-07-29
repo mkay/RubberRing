@@ -1,0 +1,40 @@
+Rubber Ring — an Android play-along looper
+Copyright (C) 2025–2026 Kreuder <mail@singular.de>
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License, version 3, as published by the
+Free Software Foundation.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
+
+Version 3 only, not "or any later version". Every source file carries
+`SPDX-License-Identifier: GPL-3.0-only` saying so.
+
+
+NAME AND ARTWORK
+
+The licence above covers the source code. It does not extend to the app's name,
+its wordmark or its icon, which are original artwork:
+
+  app/src/main/res/drawable/claim.xml
+  app/src/main/res/drawable/ic_ring.xml
+  app/src/main/res/drawable/ic_launcher_foreground.xml
+  app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+  app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+  app/src/main/res/mipmap-*/ic_launcher.png
+  app/src/main/res/mipmap-*/ic_launcher_round.png
+  docs/icon.png
+  fastlane/metadata/android/en-US/images/icon.png
+  fastlane/metadata/android/en-US/images/featureGraphic.png
+
+Copyright (C) 2025–2026 Kreuder <mail@singular.de>. You may redistribute them as
+part of an unmodified build of this app, and reproduce them to refer to the app —
+in a review, a screenshot, a link. Any other use needs permission.
+
+If you distribute a modified version, as the GPL entitles you to, give it your
+own name and your own artwork. The code is yours to fork; the identity is not.

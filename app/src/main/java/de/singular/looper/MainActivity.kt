@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package de.singular.looper
 
 import android.content.Intent
@@ -777,11 +779,17 @@ private fun AboutScreen(onClose: () -> Unit) {
                 AboutBody("If you can, support its development:")
                 AboutLink(KOFI_URL) { uriHandler.openUri(KOFI_URL) }
             }
+            // GPL §5 requires a derivative to preserve legal notices, so a licence stated *in the
+            // app* rather than only in the repo is worth more than it looks: a clone that stripped
+            // this screen has done so deliberately, and the before-and-after is a screenshot.
             AboutSection("License") {
+                AboutBody("Copyright © 2025–2026 Kreuder")
                 AboutBody(
-                    "Rubber Ring is free software under the GPL-3.0. It's built with AndroidX " +
-                        "and Jetpack Compose, licensed under Apache 2.0.",
+                    "Rubber Ring is free software under the GPL-3.0-only. The name and the " +
+                        "artwork are not covered by that licence — a fork needs its own. Built " +
+                        "with AndroidX and Jetpack Compose, licensed under Apache 2.0.",
                 )
+                AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
             }
         }
     }
