@@ -19,6 +19,25 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+                Audio handed over by another app: a recorder's share sheet, or "Open with" in a
+                file manager. Import copies the file into our own storage straight away, so the
+                one-shot read grant that rides along with the intent is all we ever need — no
+                persistable permission, and nothing to hold once the copy is made.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
         </activity>
     </application>
 

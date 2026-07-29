@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Added
+- Send a recording straight to Rubber Ring from another app — it now appears in the share sheet for audio, and under "Open with" in a file manager. The track is imported and opened in one step, exactly as if you had picked it yourself. As with any import, the file is copied into the app; the original is left where it is.
+
 ## [0.7.1] - 2026-07-20
 
 Maintenance release: identical features to 0.7, rebuilt with a reproducibility fix (disabled AGP's non-deterministic ART baseline-profile dex rewriting) so F-Droid's buildserver can reproduce and publish it. No functional changes.

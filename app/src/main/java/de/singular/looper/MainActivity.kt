@@ -1,5 +1,7 @@
 package de.singular.looper
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -141,6 +143,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -195,11 +198,29 @@ private const val EDGE_INSET_FRACTION = 0.5f
 private const val LOCKED_ALPHA = 0.4f
 
 class MainActivity : ComponentActivity() {
+    /**
+     * A track another app has handed us, waiting to be imported.
+     *
+     * Kept on the activity rather than read out of `intent` inside the composition, because the
+     * intent stays on the activity for its whole life while this has to fire exactly once: it is
+     * cleared the moment the import starts, so nothing re-imports when the composition restarts.
+     */
+    private var handedOver by mutableStateOf<Uri?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Only on a fresh start. A recreation — a theme flip does it, so does coming back after
+        // the process was killed — re-delivers the same intent, and acting on it again would put
+        // a second copy of the same take in the library.
+        if (savedInstanceState == null) handedOver = audioHandedOver(intent)
         enableEdgeToEdge()
         setContent {
             val viewModel: LooperViewModel = viewModel()
+            LaunchedEffect(handedOver) {
+                val uri = handedOver ?: return@LaunchedEffect
+                handedOver = null
+                viewModel.importAndOpen(uri, queryDisplayName(this@MainActivity, uri))
+            }
             val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
             val dark = when (themeMode) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -222,6 +243,20 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    /** A second share while we are already running arrives here rather than through onCreate. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        audioHandedOver(intent)?.let { handedOver = it }
+    }
+}
+
+/** The audio a share or an "open with" carries, or null if this intent is neither. */
+private fun audioHandedOver(intent: Intent): Uri? = when (intent.action) {
+    Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+    Intent.ACTION_VIEW -> intent.data
+    else -> null
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2291,6 +2326,9 @@ private fun queryDisplayName(context: android.content.Context, uri: android.net.
             if (c.moveToFirst()) c.getString(0) else null
         }
     }.getOrNull()
+        // A file: uri has no provider to ask, and the name is right there in the path. Only
+        // "open with" from an older file manager gets here — the document picker always answers.
+        ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
 
 private fun formatMs(ms: Long): String {
     val totalSec = ms / 1000
