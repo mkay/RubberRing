@@ -58,6 +58,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -883,6 +884,7 @@ private fun LooperDrawer(
                         label = {
                             Text(track.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         },
+                        icon = { Icon(Icons.Default.GraphicEq, contentDescription = null) },
                         selected = false,
                         onClick = { onOpenRecent(track) },
                         modifier = itemPadding,
