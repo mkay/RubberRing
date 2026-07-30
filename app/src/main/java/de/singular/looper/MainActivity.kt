@@ -1070,12 +1070,17 @@ private fun SupportDialog(onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Text(
-                    "Rubber Ring doesn't track you. Anything. The downside is that I have no " +
-                        "idea whether it's being used, or whether I'm publishing into the void.",
+                    "This app doesn't track. Anything.\n" +
+                        "The downside is I have no idea if or how often it's used or downloaded.\n" +
+                        "Could be zero, could be a secret cult following. I genuinely don't know.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "So there are three ways to keep me motivated:",
+                    "Am I wasting my time publishing it? You tell me.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    "There are three (maybe more) ways to keep me motivated:",
                     style = MaterialTheme.typography.bodyMedium,
                 )
 
