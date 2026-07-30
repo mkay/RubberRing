@@ -50,6 +50,10 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.12.4")
+    // Custom Tabs, for the Support dialog's links. The browser fetches in its own process, so
+    // this buys an in-app-feeling tab *without* the INTERNET permission — the manifest stays
+    // permission-free, which is the whole basis of the app's no-tracking claim.
+    implementation("androidx.browser:browser:1.8.0")
 
     val composeBom = platform("androidx.compose:compose-bom:2026.06.01")
     implementation(composeBom)
