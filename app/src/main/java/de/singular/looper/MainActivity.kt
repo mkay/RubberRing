@@ -64,7 +64,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -118,6 +117,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -275,7 +275,6 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
     var showKeepAwakeInfo by remember { mutableStateOf(false) }
     // The library's selection mode: the ids of the picked tracks (empty = not selecting). Held here
     // rather than in LibraryContent because selecting takes over the app bar, which lives here.
@@ -354,13 +353,6 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
         )
     }
 
-    // About sits on top of Settings, which stays open underneath — so backing out of About lands
-    // back on Settings rather than dumping you at the library.
-    if (showAbout) {
-        AboutScreen(onClose = { showAbout = false })
-        return
-    }
-
     // Settings is a full screen shown over whatever's underneath; the confirm-restore dialog and
     // backup-result toast above stay in scope, so Backup/Restore works from here too.
     if (showSettings) {
@@ -377,7 +369,6 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             onSelectTheme = viewModel::setThemeMode,
             onBackup = startBackup,
             onRestore = startRestore,
-            onAbout = { showAbout = true },
             onClose = { showSettings = false },
         )
         return
@@ -598,8 +589,33 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
 }
 
 /**
- * Full-screen settings, reached from the drawer: the playback toggles, the appearance (theme)
- * choice, and the library backup/restore actions. [onClose] backs out to the previous screen.
+ * The two halves of the settings, and the page that is not a setting at all.
+ *
+ * The split is by *when you come here*, not by what the settings technically are. **Playback** is
+ * what the waveform does while a track is running — the things you change with an instrument in
+ * hand, mid-practice. **System** is the app's own set-up: how it looks, and where the library goes.
+ * One is visited often and the other is visited twice.
+ *
+ * Keep-screen-on sits under System rather than Playback, which is the one placement worth arguing:
+ * it is about a track being played, but it is a display setting that costs battery, set once for
+ * how you use the device rather than adjusted per track.
+ *
+ * **About** is the odd one, and is here because the tab row is the only always-visible strip on
+ * this screen. It was a row at the bottom of the settings, which is where a footer item belongs
+ * right up until the settings acquire tabs — then it is a destination buried inside one of two
+ * halves, with nothing about "System" that says the app's version and its bug tracker are in there.
+ * A tab is one tap from either half and says its own name whichever half is showing.
+ */
+private enum class SettingsTab(val title: String) {
+    PLAYBACK("Playback"),
+    SYSTEM("System"),
+    ABOUT("About"),
+}
+
+/**
+ * Full-screen settings, reached from the drawer: the playback toggles, the app's own set-up
+ * (appearance, backup/restore), and About, split across the tabs in [SettingsTab]. [onClose] backs
+ * out to the previous screen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -616,10 +632,12 @@ private fun SettingsScreen(
     onSelectTheme: (ThemeMode) -> Unit,
     onBackup: () -> Unit,
     onRestore: () -> Unit,
-    onAbout: () -> Unit,
     onClose: () -> Unit,
 ) {
     BackHandler(onBack = onClose)
+    // Local state: back from here leaves the settings altogether, so nothing a level up needs to
+    // know which tab was showing.
+    var tab by rememberSaveable { mutableStateOf(SettingsTab.PLAYBACK) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -635,56 +653,87 @@ private fun SettingsScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 16.dp),
+                .padding(innerPadding),
         ) {
-            DrawerSectionLabel("Playback")
-            SettingSwitchRow("Follow playhead", Icons.Default.MyLocation, following, onToggleFollow)
-            SettingSwitchRow(
-                "Keep screen on",
-                ImageVector.vectorResource(R.drawable.ic_brightness_alert),
-                keepScreenOn,
-                onToggleKeepScreenOn,
-            )
-            SettingSwitchRow("Save zoom level", Icons.Default.ZoomIn, saveZoom, onToggleSaveZoom)
-            SettingSwitchRow(
-                "Add padding to waveform",
-                ImageVector.vectorResource(R.drawable.ic_fit_width),
-                edgeInset,
-                onToggleEdgeInset,
-            )
+            PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
+                SettingsTab.entries.forEach { entry ->
+                    Tab(
+                        selected = tab == entry,
+                        onClick = { tab = entry },
+                        text = { Text(entry.title) },
+                    )
+                }
+            }
+            // Each tab scrolls on its own rather than sharing one scroller: About brings its own
+            // layout and its own scroll — it is a page, not a column of rows — and a shared scroll
+            // state would carry its offset across a tab switch.
+            when (tab) {
+                SettingsTab.PLAYBACK -> SettingsPage {
+                    SettingSwitchRow(
+                        "Follow playhead",
+                        Icons.Default.MyLocation,
+                        following,
+                        onToggleFollow,
+                    )
+                    SettingSwitchRow(
+                        "Save zoom level",
+                        Icons.Default.ZoomIn,
+                        saveZoom,
+                        onToggleSaveZoom,
+                    )
+                    SettingSwitchRow(
+                        "Add padding to waveform",
+                        ImageVector.vectorResource(R.drawable.ic_fit_width),
+                        edgeInset,
+                        onToggleEdgeInset,
+                    )
+                }
 
-            DrawerSectionLabel("Appearance")
-            ThemeModeChips(
-                mode = themeMode,
-                onSelect = onSelectTheme,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
+                SettingsTab.SYSTEM -> SettingsPage {
+                    DrawerSectionLabel("Appearance")
+                    ThemeModeChips(
+                        mode = themeMode,
+                        onSelect = onSelectTheme,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                    SettingSwitchRow(
+                        "Keep screen on",
+                        ImageVector.vectorResource(R.drawable.ic_brightness_alert),
+                        keepScreenOn,
+                        onToggleKeepScreenOn,
+                    )
 
-            DrawerSectionLabel("Library")
-            BackupChoiceRow(
-                icon = Icons.Default.Save,
-                title = "Back up library",
-                subtitle = "Save all tracks and loops to a file",
-                onClick = onBackup,
-            )
-            BackupChoiceRow(
-                icon = Icons.Default.Restore,
-                title = "Restore library",
-                subtitle = "Replace everything from a backup file",
-                onClick = onRestore,
-            )
+                    DrawerSectionLabel("Backup & Restore")
+                    BackupChoiceRow(
+                        icon = Icons.Default.Save,
+                        title = "Back up library",
+                        subtitle = "Save all tracks and loops to a file",
+                        onClick = onBackup,
+                    )
+                    BackupChoiceRow(
+                        icon = Icons.Default.Restore,
+                        title = "Restore library",
+                        subtitle = "Replace everything from a backup file",
+                        onClick = onRestore,
+                    )
+                }
 
-            DrawerSectionLabel("About")
-            BackupChoiceRow(
-                icon = Icons.Default.Info,
-                title = "About this app",
-                subtitle = "Version, source code, and how to get in touch",
-                onClick = onAbout,
-            )
+                SettingsTab.ABOUT -> AboutPage()
+            }
         }
     }
+}
+
+/** The ground a settings tab stands on: the whole tab, scrolling, with room at the bottom. */
+@Composable
+private fun SettingsPage(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(top = 8.dp, bottom = 16.dp),
+        content = content,
+    )
 }
 
 private const val REPO_URL = "https://github.com/mkay/RubberRing"
@@ -692,15 +741,19 @@ private const val ISSUES_URL = "$REPO_URL/issues"
 private const val KOFI_URL = "https://ko-fi.com/s1ngular"
 
 /**
- * About: what the app is, where it lives, and how to report a bug or chip in. Reached from
- * Settings rather than the drawer — the drawer's bottom slot belongs to Quick help, which is
- * what you want mid-track; this is the page you visit once out of curiosity and once when
- * filing an issue.
+ * About: what the app is, where it lives, and how to report a bug or chip in.
+ *
+ * A tab inside Settings rather than an item in the drawer — the drawer's bottom slot belongs to
+ * Quick help, which is what you want mid-track; this is the page you visit once out of curiosity
+ * and once when filing an issue. It was a screen of its own until the settings grew tabs and it
+ * became a destination buried in one of them; see [SettingsTab] for why a tab is where it ended up.
+ *
+ * It sits inside the settings' own Scaffold rather than bringing one of its own — the bar above it
+ * already carries the title and the way back out.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AboutScreen(onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
+private fun AboutPage(modifier: Modifier = Modifier) {
     val uriHandler = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
     val haptic = LocalHapticFeedback.current
@@ -709,89 +762,77 @@ private fun AboutScreen(onClose: () -> Unit) {
     // build when a version was re-released (0.3 → 0.4 taught us that the name alone can lie).
     val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = { Text("About this app") },
-            )
-        },
-    ) { innerPadding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(Modifier.height(16.dp))
-            Image(
-                painter = painterResource(R.drawable.ic_ring),
-                contentDescription = null,
-                modifier = Modifier.size(88.dp),
-            )
-            Spacer(Modifier.height(12.dp))
-            Text("Rubber Ring", style = MaterialTheme.typography.headlineSmall)
-            // Long-press to copy, mirroring the library's press-and-hold idiom. Android 13 and up
-            // pops its own clipboard confirmation, so only older versions get a toast.
-            Text(
-                "v$version",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .clip(ControlShape)
-                    .combinedClickable(
-                        onClick = {},
-                        onLongClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            clipboard.setText(AnnotatedString("Rubber Ring $version"))
-                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                Toast
-                                    .makeText(context, "Version copied", Toast.LENGTH_SHORT)
-                                    .show()
-                            }
-                        },
-                    )
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            )
+    Column(
+        modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.height(16.dp))
+        // The ring on the page's own background, not on a tile: it is a line drawing that carries
+        // its own contrast either way round, so there is nothing for a tile to rescue.
+        Image(
+            painter = painterResource(R.drawable.ic_ring),
+            contentDescription = null,
+            modifier = Modifier.size(88.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("Rubber Ring", style = MaterialTheme.typography.headlineSmall)
+        // Long-press to copy, mirroring the library's press-and-hold idiom. Android 13 and up
+        // pops its own clipboard confirmation, so only older versions get a toast.
+        Text(
+            "v$version",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clip(ControlShape)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        clipboard.setText(AnnotatedString("Rubber Ring $version"))
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                            Toast
+                                .makeText(context, "Version copied", Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    },
+                )
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
 
-            Spacer(Modifier.height(28.dp))
-            AboutSection("About") {
-                AboutBody(
-                    "I built Rubber Ring primarily for myself — maybe you'll find it just as " +
-                        "useful as I do.",
-                )
-            }
-            AboutSection("Website") {
-                AboutBody("The app lives here:")
-                AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
-            }
-            AboutSection("Bugs") {
-                AboutBody("Found a hiccup? Let me know:")
-                AboutLink(ISSUES_URL) { uriHandler.openUri(ISSUES_URL) }
-            }
-            AboutSection("Support") {
-                AboutBody("If you can, support its development:")
-                AboutLink(KOFI_URL) { uriHandler.openUri(KOFI_URL) }
-            }
-            // GPL §5 requires a derivative to preserve legal notices, so a licence stated *in the
-            // app* rather than only in the repo is worth more than it looks: a clone that stripped
-            // this screen has done so deliberately, and the before-and-after is a screenshot.
-            AboutSection("License") {
-                AboutBody("Copyright © 2025–2026 Kreuder")
-                AboutBody(
-                    "Rubber Ring is free software under the GPL-3.0-only. The wordmark and the " +
-                        "icon are CC BY 4.0; the name is not licensed, so a fork needs its own. " +
-                        "Built with AndroidX and Jetpack Compose, licensed under Apache 2.0.",
-                )
-                AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
-            }
+        Spacer(Modifier.height(28.dp))
+        AboutSection("About") {
+            AboutBody(
+                "I built Rubber Ring primarily for myself — maybe you'll find it just as " +
+                    "useful as I do.",
+            )
+        }
+        AboutSection("Website") {
+            AboutBody("The app lives here:")
+            AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
+        }
+        AboutSection("Bugs") {
+            AboutBody("Found a hiccup? Let me know:")
+            AboutLink(ISSUES_URL) { uriHandler.openUri(ISSUES_URL) }
+        }
+        AboutSection("Support") {
+            AboutBody("If you can, support its development:")
+            AboutLink(KOFI_URL) { uriHandler.openUri(KOFI_URL) }
+        }
+        // GPL §5 requires a derivative to preserve legal notices, so a licence stated *in the
+        // app* rather than only in the repo is worth more than it looks: a clone that stripped
+        // this screen has done so deliberately, and the before-and-after is a screenshot.
+        AboutSection("License") {
+            AboutBody("Copyright © 2025–2026 Kreuder")
+            AboutBody(
+                "Rubber Ring is free software under the GPL-3.0-only. The wordmark and the " +
+                    "icon are CC BY 4.0; the name is not licensed, so a fork needs its own. " +
+                    "Built with AndroidX and Jetpack Compose, licensed under Apache 2.0.",
+            )
+            AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
         }
     }
 }
