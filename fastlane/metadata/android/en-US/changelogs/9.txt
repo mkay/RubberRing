@@ -1,0 +1,6 @@
+• Rubber Ring now speaks German, with a language picker under Settings → System → General.
+• Chords can use German note names — H and B instead of B and B flat (Settings → Playback).
+• Settings are split into Playback, System and About tabs.
+• New Support entry in the menu: three ways to help the app along, all of them links out.
+• Send a recording straight to Rubber Ring from another app, via the share sheet or "Open with".
+• The licence is now stated in full under About.

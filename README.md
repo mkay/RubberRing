@@ -19,6 +19,8 @@ Early-stage release — expect rough edges. Feedback and bug reports welcome via
 - **Pitch-preserving speed** — slow down or speed up from 0.5× to 1.5× with a WSOLA time-stretch that keeps the original pitch.
 - **Saved loops** — capture a region + grid per track and recall it later.
 - **Practice arrangements** — chain saved loops into an ordered sequence, each repeated a set number of times and optionally looping the whole set — for drilling A–B–A transitions.
+- **English and German** — picked in Settings or followed from the device, stored as Android's own per-app language. Chords can optionally use German note names (H and B).
+- **Opens audio shared from other apps** — via the share sheet or "Open with".
 - **Session comforts** — System/Light/Dark themes with a theme-aware waveform, follow-playhead auto-scroll, keep-screen-on, library backup & restore, and an in-app quick-help sheet. Preferences persist across launches.
 
 ## Tech stack

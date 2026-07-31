@@ -97,7 +97,7 @@
     <string name="about_section_bugs">Fehler</string>
     <string name="about_body_bugs">Etwas hakt? Sag mir Bescheid:</string>
     <string name="about_section_support">Unterstützen</string>
-    <string name="about_body_support">Wenn du magst, unterstütze die Entwicklung:</string>
+    <string name="about_body_support">Falls du kannst, unterstütze die Entwicklung:</string>
     <string name="about_section_license">Lizenz</string>
 
     <string name="drawer_library">Bibliothek</string>
@@ -112,10 +112,12 @@
     <string name="support_ways">Es gibt (mindestens) drei Wege, mich zu motivieren:</string>
 
     <string name="support_easy_title">Der einfache Weg</string>
-    <string name="support_easy_action">Gib der App ein "Like"</string>
+    <!-- Deliberately not "Gib der App ein Like": that is the English sentence in German words.
+         The Like-Button itself is named in the note below, which is where explaining belongs. -->
+    <string name="support_easy_action">App bewerten</string>
     <string name="support_easy_note">Öffnet eine Seite auf meiner Website mit einem Like-Button. Gezählt wird erst, wenn du ihn drückst — nur der Klick und eine anonymisierte IP.</string>
     <string name="support_nerdy_title">Der nerdige Weg</string>
-    <string name="support_nerdy_action">Gib ihr einen Stern auf GitHub</string>
+    <string name="support_nerdy_action">GitHub Stern</string>
     <string name="support_nerdy_note">Ein Stern ist eine Zahl, die ich sehen kann, und er hilft anderen, die App zu finden.</string>
     <string name="support_generous_title">Der großzügige Weg</string>
     <string name="support_generous_action">Unterstütze sie auf Ko-fi</string>
@@ -137,7 +139,7 @@
     <string name="help_recall_loop_title">Loop aufrufen</string>
     <string name="help_recall_loop_body">Tipp auf einen gespeicherten Loop, um seine Marker zurückzuholen. Halte ihn gedrückt für Umbenennen und Löschen.</string>
 
-    <string name="library_intro">Wähl eine Audiodatei, um einen Abschnitt zu markieren und zu loopen.</string>
+    <string name="library_intro">Wähle eine Audiodatei und markiere einen Abschnitt.</string>
     <string name="library_formats">Unterstützt MP3, AAC (M4A), FLAC, WAV und OGG.</string>
     <string name="library_heading">Bibliothek</string>
     <string name="untitled_track">Ohne Titel</string>
@@ -150,7 +152,7 @@
     <string name="cd_selected">Ausgewählt</string>
     <string name="cd_not_selected">Nicht ausgewählt</string>
 
-    <string name="hint_long_press_marker">Marker zum verschieben gedrückt halten</string>
+    <string name="hint_long_press_marker">Marker gedrückt halten</string>
     <string name="time_start">Start</string>
     <string name="time_loop">Loop</string>
     <string name="time_end">Ende</string>

@@ -4,8 +4,20 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.8] - 2026-07-31
+
 ### Added
+- A German translation, and a language picker in Settings → System → General. The choice is stored as Android's own per-app language rather than as a private setting, so on Android 13 and up it and the picker in Android's Settings are one value instead of two that can disagree. Leave it on "System default" to follow the device.
+- Optional German note names for chords (Settings → Playback): B natural reads H, and B flat reads B, as written in German-speaking countries. Off by default, since international spelling is what chord charts and tab sites use. It is a display choice only — a chord is stored as a pitch class either way, so switching re-spells existing hand edits rather than altering them.
 - Send a recording straight to Rubber Ring from another app — it now appears in the share sheet for audio, and under "Open with" in a file manager. The track is imported and opened in one step, exactly as if you had picked it yourself. As with any import, the file is copied into the app; the original is left where it is.
+- A Support entry in the menu, with three ways to help the app along: a like on its web page, a star on GitHub, or Ko-fi. Each is a link out through the browser, so the app still asks for no network permission of its own and nothing here is measured.
+- The licence is now stated in the app itself, under About: the copyright line, GPL-3.0-only for the code, and CC BY 4.0 for the wordmark and icon. The repository carries matching SPDX headers and a COPYRIGHT file.
+
+### Changed
+- Settings are split into Playback, System and About tabs instead of one long column. Playback is what the waveform does mid-practice; System is the app's own set-up. About stops being a separate screen and becomes the third tab.
+- Recent tracks in the menu are marked with a waveform icon, so they read as tracks rather than as more destinations.
+- Every piece of text in the app now comes from a resource file instead of being written into the code, which is what makes translating it possible at all. No visible change on its own.
+- The beat-grid chips shrink their labels a step rather than wrapping when a translation runs longer than the English, so a longer word can't break the row.
 
 ## [0.7.1] - 2026-07-20
 
@@ -99,7 +111,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.8...HEAD
+[0.8]: https://github.com/mkay/RubberRing/compare/v0.7.1...v0.8
 [0.7.1]: https://github.com/mkay/RubberRing/compare/v0.7...v0.7.1
 [0.7]: https://github.com/mkay/RubberRing/compare/v0.6...v0.7
 [0.6]: https://github.com/mkay/RubberRing/compare/v0.5...v0.6
