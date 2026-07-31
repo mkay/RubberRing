@@ -10,6 +10,24 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.RubberRing">
 
+        <!--
+            Not a service that ever runs — it is disabled, and exists only to carry the meta-data
+            below. That flag is how AppCompat is told to persist the language chosen in Settings.
+
+            Without it the choice survives only until the process dies. Android 13 and up hides
+            that: there the framework stores the per-app language itself, so the bug is invisible
+            on a modern device and shows up only on 8 to 12 — which is the entire span AppCompat
+            was added for.
+        -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:screenOrientation="portrait"
