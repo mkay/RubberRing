@@ -11,22 +11,42 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+/**
+ * How the twelve pitch classes are spelled.
+ *
+ * The difference is one letter, and it is the letter German-speaking musicians grew up with: what
+ * the rest of the world calls B, German notation calls H, and B is used for what elsewhere is B
+ * flat. It is a display choice only — a [Chord] is stored as a pitch-class number either way, so
+ * switching this re-spells existing chords (including hand edits) rather than changing them.
+ */
+enum class NoteNaming { INTERNATIONAL, GERMAN }
+
 /** 0 = C, 1 = C#, … 11 = B. */
 private val ROOT_NAMES = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+
+/** The same twelve, spelled the German way: 10 is B (= A#/B flat) and 11 is H. */
+private val ROOT_NAMES_DE = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H")
+
+/** The root names for [naming], indexed by pitch class. */
+fun rootNames(naming: NoteNaming): Array<String> =
+    if (naming == NoteNaming.GERMAN) ROOT_NAMES_DE else ROOT_NAMES
 
 /** A chord quality. Triads plus the two common sevenths; DOM7/SUS are reserved for a later pass. */
 enum class Quality { MAJ, MIN, MAJ7, MIN7, NONE }
 
 /** A recognised chord: a root pitch class (0 = C) and a quality. NONE means "no chord / silence". */
 data class Chord(val root: Int, val quality: Quality) {
-    val name: String
-        get() = when (quality) {
-            Quality.MAJ -> ROOT_NAMES[root]
-            Quality.MIN -> ROOT_NAMES[root] + "m"
-            Quality.MAJ7 -> ROOT_NAMES[root] + "maj7"
-            Quality.MIN7 -> ROOT_NAMES[root] + "m7"
+    /** How this chord is written, spelling its root according to [naming]. */
+    fun name(naming: NoteNaming = NoteNaming.INTERNATIONAL): String {
+        val root = rootNames(naming)[root]
+        return when (quality) {
+            Quality.MAJ -> root
+            Quality.MIN -> root + "m"
+            Quality.MAJ7 -> root + "maj7"
+            Quality.MIN7 -> root + "m7"
             Quality.NONE -> ""
         }
+    }
 
     companion object {
         val NONE = Chord(0, Quality.NONE)

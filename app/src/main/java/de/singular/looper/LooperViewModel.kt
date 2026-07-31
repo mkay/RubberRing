@@ -21,6 +21,7 @@ import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.Metronome
 import de.singular.looper.audio.NormalizeMode
+import de.singular.looper.audio.NoteNaming
 import de.singular.looper.audio.Quality
 import de.singular.looper.audio.TimeStretch
 import de.singular.looper.audio.WaveformData
@@ -37,6 +38,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import androidx.annotation.StringRes
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -53,7 +55,25 @@ sealed interface LooperUiState {
     data object Empty : LooperUiState
     data class Loading(val fileName: String?) : LooperUiState
     data class Loaded(val fileName: String?, val audio: DecodedAudio) : LooperUiState
-    data class Error(val message: String) : LooperUiState
+
+    /**
+     * A load that failed. Carries the *resource* rather than a resolved string so the message is
+     * rendered in whatever locale is in effect when it is shown, not the one that was current when
+     * the failure happened.
+     */
+    data class Error(@StringRes val message: Int) : LooperUiState
+}
+
+/** Which resource explains [this] to the user. Platform detail stays in the log, not on screen. */
+@StringRes
+private fun Throwable.toErrorMessage(): Int = when (this) {
+    is LibraryRepository.UnreadableFileException -> R.string.error_unreadable_file
+    is AudioDecoder.DecodeException -> when (failure) {
+        AudioDecoder.DecodeFailure.CANNOT_OPEN -> R.string.error_cannot_open_file
+        AudioDecoder.DecodeFailure.DECODE_FAILED -> R.string.error_decode_failed
+    }
+
+    else -> R.string.error_unknown
 }
 
 /** Maximum number of named loops a track may hold. */
@@ -68,6 +88,7 @@ private const val KEY_SAVE_ZOOM = "save_zoom"
 private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_EDGE_INSET = "edge_inset"
 private const val KEY_SHOW_CHORDS = "show_chords"
+private const val KEY_GERMAN_NOTES = "german_notes"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
@@ -325,6 +346,19 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (!on) _chordEditMode.value = false // editing a hidden lane makes no sense
     }
 
+    // How chord roots are spelled. Deliberately a preference rather than a consequence of the
+    // device language: plenty of German speakers read tabs written in international notation, and
+    // plenty of players elsewhere were taught H. Display only — see [NoteNaming].
+    private val _noteNaming = MutableStateFlow(
+        if (prefs.getBoolean(KEY_GERMAN_NOTES, false)) NoteNaming.GERMAN else NoteNaming.INTERNATIONAL,
+    )
+    val noteNaming: StateFlow<NoteNaming> = _noteNaming.asStateFlow()
+
+    fun setGermanNotes(on: Boolean) {
+        _noteNaming.value = if (on) NoteNaming.GERMAN else NoteNaming.INTERNATIONAL
+        prefs.edit { putBoolean(KEY_GERMAN_NOTES, on) }
+    }
+
     private val _themeMode = MutableStateFlow(readThemeMode(prefs.getString(KEY_THEME_MODE, null)))
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
@@ -396,6 +430,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         .put(KEY_SAVE_ZOOM, _saveZoom.value)
         .put(KEY_EDGE_INSET, _edgeInset.value)
         .put(KEY_SHOW_CHORDS, _showChords.value)
+        .put(KEY_GERMAN_NOTES, _noteNaming.value == NoteNaming.GERMAN)
         .put(KEY_THEME_MODE, _themeMode.value.name)
         .toString()
 
@@ -406,6 +441,10 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (o.has(KEY_SAVE_ZOOM)) _saveZoom.value = o.getBoolean(KEY_SAVE_ZOOM)
         if (o.has(KEY_EDGE_INSET)) _edgeInset.value = o.getBoolean(KEY_EDGE_INSET)
         if (o.has(KEY_SHOW_CHORDS)) _showChords.value = o.getBoolean(KEY_SHOW_CHORDS)
+        if (o.has(KEY_GERMAN_NOTES)) {
+            _noteNaming.value =
+                if (o.getBoolean(KEY_GERMAN_NOTES)) NoteNaming.GERMAN else NoteNaming.INTERNATIONAL
+        }
         if (o.has(KEY_THEME_MODE)) _themeMode.value = readThemeMode(o.getString(KEY_THEME_MODE))
         prefs.edit {
             putBoolean(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
@@ -413,6 +452,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             putBoolean(KEY_SAVE_ZOOM, _saveZoom.value)
             putBoolean(KEY_EDGE_INSET, _edgeInset.value)
             putBoolean(KEY_SHOW_CHORDS, _showChords.value)
+            putBoolean(KEY_GERMAN_NOTES, _noteNaming.value == NoteNaming.GERMAN)
             putString(KEY_THEME_MODE, _themeMode.value.name)
         }
     }
@@ -598,7 +638,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 onLoaded(audio) // may restore a saved normalize mode
                 applyGain()
             },
-            onFailure = { _state.value = LooperUiState.Error(it.message ?: "Unknown error") },
+            onFailure = { _state.value = LooperUiState.Error(it.toErrorMessage()) },
         )
     }
 
@@ -668,7 +708,10 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (track.savedLoops.size >= MAX_SAVED_LOOPS) return
         val r = _region.value
         val g = _grid.value
-        val name = label.trim().ifBlank { "Loop ${track.savedLoops.size + 1}" }
+        val name = label.trim().ifBlank {
+            getApplication<Application>()
+                .getString(R.string.loop_default_name, track.savedLoops.size + 1)
+        }
         val loop = SavedLoop(
             id = UUID.randomUUID().toString(),
             label = name,

@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Deutsch. Angesprochen wird geduzt — die englische Vorlage ist bewusst persönlich
+  und in der ersten Person geschrieben, und das überlebt eine Übersetzung nur mit "du".
+-->
+<resources>
+
+    <string name="app_tagline">ein Looper zum Mitspielen</string>
+
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_delete">Löschen</string>
+    <string name="action_save">Speichern</string>
+    <string name="action_rename">Umbenennen</string>
+    <string name="action_close">Schließen</string>
+    <string name="action_got_it">Verstanden</string>
+    <string name="action_done">Fertig</string>
+    <string name="action_back">Zurück</string>
+    <string name="action_clear">Leeren</string>
+    <string name="action_split">Teilen</string>
+    <string name="action_merge">Verbinden</string>
+    <string name="action_set">Setzen</string>
+
+    <string name="cd_open_menu">Menü öffnen</string>
+    <string name="cd_cancel_selection">Auswahl aufheben</string>
+    <string name="cd_delete_selected">Ausgewählte löschen</string>
+    <string name="cd_screen_kept_on">Bildschirm bleibt an</string>
+    <plurals name="selection_count">
+        <item quantity="one">%d ausgewählt</item>
+        <item quantity="other">%d ausgewählt</item>
+    </plurals>
+
+    <string name="state_decoding">Wird dekodiert…</string>
+    <string name="error_format">Fehler: %1$s</string>
+    <string name="error_unreadable_file">Die ausgewählte Datei konnte nicht gelesen werden</string>
+    <string name="error_cannot_open_file">Die Datei konnte nicht geöffnet werden</string>
+    <string name="error_decode_failed">Diese Audiodatei konnte nicht dekodiert werden</string>
+    <string name="error_unknown">Unbekannter Fehler</string>
+
+    <string name="backup_exported">Bibliothek gesichert</string>
+    <string name="backup_restored">Bibliothek wiederhergestellt</string>
+    <string name="backup_failed">Sicherung fehlgeschlagen — prüf die Datei und versuch es noch einmal</string>
+
+    <string name="restore_confirm_title">Sicherung wiederherstellen?</string>
+    <string name="restore_confirm_body">Das ersetzt deine gesamte aktuelle Bibliothek — alle importierten Tracks und gespeicherten Loops — durch den Inhalt der Sicherung. Das lässt sich nicht rückgängig machen.</string>
+    <string name="restore_choose">Sicherung auswählen</string>
+
+    <string name="delete_track_title">Track löschen?</string>
+    <plurals name="delete_tracks_title">
+        <item quantity="one">%d Track löschen?</item>
+        <item quantity="other">%d Tracks löschen?</item>
+    </plurals>
+    <string name="delete_track_body">„%1$s“ und die dazu gespeicherten Loops aus deiner Bibliothek entfernen? Die Originaldatei auf deinem Gerät bleibt unberührt.</string>
+    <plurals name="delete_tracks_body">
+        <item quantity="one">Diesen %d Track und seine gespeicherten Loops aus deiner Bibliothek entfernen? Die Originaldatei auf deinem Gerät bleibt unberührt.</item>
+        <item quantity="other">Diese %d Tracks und ihre gespeicherten Loops aus deiner Bibliothek entfernen? Die Originaldateien auf deinem Gerät bleiben unberührt.</item>
+    </plurals>
+
+    <string name="keep_awake_title">Bildschirm bleibt an</string>
+    <string name="keep_awake_body">„Bildschirm anlassen“ ist aktiviert, der Bildschirm wird also nicht dunkler und sperrt nicht, solange ein Track geöffnet ist. Praktisch beim Üben, kostet aber mehr Akku.</string>
+
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_tab_playback">Wiedergabe</string>
+    <string name="settings_tab_system">System</string>
+    <string name="settings_tab_about">Über</string>
+
+    <string name="setting_follow_playhead">Abspielposition folgen</string>
+    <string name="setting_save_zoom">Zoomstufe speichern</string>
+    <string name="setting_edge_inset">Rand um die Wellenform</string>
+    <string name="setting_german_notes">Deutsche Notennamen (H/B)</string>
+    <string name="setting_keep_screen_on">Bildschirm anlassen</string>
+
+    <string name="setting_language">Sprache</string>
+    <string name="language_system">Systemsprache</string>
+
+    <string name="section_appearance">Darstellung</string>
+    <string name="section_general">Allgemein</string>
+    <string name="section_backup">Sichern &amp; Wiederherstellen</string>
+
+    <string name="backup_row_title">Bibliothek sichern</string>
+    <string name="backup_row_subtitle">Alle Tracks und Loops in eine Datei speichern</string>
+    <string name="restore_row_title">Bibliothek wiederherstellen</string>
+    <string name="restore_row_subtitle">Alles aus einer Sicherungsdatei ersetzen</string>
+
+    <string name="theme_system">System</string>
+    <string name="theme_light">Hell</string>
+    <string name="theme_dark">Dunkel</string>
+
+    <string name="about_version">v%1$s</string>
+    <string name="toast_version_copied">Version kopiert</string>
+
+    <string name="about_section_about">Über</string>
+    <string name="about_body_about">Rubber Ring ist in erster Linie eine App für mich selbst  — aber vielleicht findest du sie ja ähnlich nützlich wie ich.</string>
+    <string name="about_section_website">Website</string>
+    <string name="about_body_website">Die App liegt hier:</string>
+    <string name="about_section_bugs">Fehler</string>
+    <string name="about_body_bugs">Etwas hakt? Sag mir Bescheid:</string>
+    <string name="about_section_support">Unterstützen</string>
+    <string name="about_body_support">Wenn du magst, unterstütze die Entwicklung:</string>
+    <string name="about_section_license">Lizenz</string>
+
+    <string name="drawer_library">Bibliothek</string>
+    <string name="drawer_import">Neue Datei importieren</string>
+    <string name="drawer_support">Rubber Ring unterstützen</string>
+    <string name="drawer_quick_help">Kurzhilfe</string>
+    <string name="section_recent">Zuletzt</string>
+
+    <string name="support_title">Die App am Leben erhalten</string>
+    <string name="support_intro">Diese App trackt nicht. Gar nicht.\nDer Nachteil: Ich habe keine Ahnung, ob und wie oft sie benutzt oder heruntergeladen wird.\nKönnte null sein, es könnten bereits Tattoos davon existieren. Ich weiß es nicht.</string>
+    <string name="support_question">Lohnt sich der Aufwand, sie zu veröffentlichen? Sag es mir.</string>
+    <string name="support_ways">Es gibt (mindestens) drei Wege, mich zu motivieren:</string>
+
+    <string name="support_easy_title">Der einfache Weg</string>
+    <string name="support_easy_action">Gib der App ein "Like"</string>
+    <string name="support_easy_note">Öffnet eine Seite auf meiner Website mit einem Like-Button. Gezählt wird erst, wenn du ihn drückst — nur der Klick und eine anonymisierte IP.</string>
+    <string name="support_nerdy_title">Der nerdige Weg</string>
+    <string name="support_nerdy_action">Gib ihr einen Stern auf GitHub</string>
+    <string name="support_nerdy_note">Ein Stern ist eine Zahl, die ich sehen kann, und er hilft anderen, die App zu finden.</string>
+    <string name="support_generous_title">Der großzügige Weg</string>
+    <string name="support_generous_action">Unterstütze sie auf Ko-fi</string>
+    <string name="support_generous_note">Völlig freiwillig. Die App ist und bleibt kostenlos.</string>
+
+    <string name="toast_no_browser">Kein Browser gefunden</string>
+
+    <string name="help_title">Kurzhilfe</string>
+    <string name="help_marker_title">Marker verschieben</string>
+    <string name="help_marker_body">Halte den Griff eines Markers (oder seine Linie) gedrückt, bis er greift, und zieh ihn dann. Das kurze Halten verhindert versehentliches Verrutschen.</string>
+    <string name="help_playhead_title">Abspielposition verschieben</string>
+    <string name="help_playhead_body">Tipp irgendwo in den freien Bereich, um die Abspielposition dorthin zu setzen, oder zieh nahe der Abspiellinie, um zu scrubben.</string>
+    <string name="help_countin_title">Mit Einzähler starten</string>
+    <string name="help_countin_body">Halte Abspielen gedrückt, um vor dem Ton einen Einzähler zu hören; ein normaler Tipp startet sofort. Taktart und Länge stellst du unter Optionen ein.</string>
+    <string name="help_zoom_title">Zoomen &amp; scrollen</string>
+    <string name="help_zoom_body">Zieh mit zwei Fingern auf, um die Wellenform zu vergrößern oder zu verkleinern. Im gezoomten Zustand ziehst du im freien Bereich zum Scrollen oder nutzt den Übersichtsstreifen unten.</string>
+    <string name="help_save_loop_title">Loop speichern</string>
+    <string name="help_save_loop_body">Setz Start- und Endmarker und tipp dann auf Speichern, um den Bereich unter einem Namen abzulegen. Gespeicherte Loops gehören zum aktuellen Track.</string>
+    <string name="help_recall_loop_title">Loop aufrufen</string>
+    <string name="help_recall_loop_body">Tipp auf einen gespeicherten Loop, um seine Marker zurückzuholen. Halte ihn gedrückt für Umbenennen und Löschen.</string>
+
+    <string name="library_intro">Wähl eine Audiodatei, um einen Abschnitt zu markieren und zu loopen.</string>
+    <string name="library_formats">Unterstützt MP3, AAC (M4A), FLAC, WAV und OGG.</string>
+    <string name="library_heading">Bibliothek</string>
+    <string name="untitled_track">Ohne Titel</string>
+    <string name="rename_track_title">Track umbenennen</string>
+    <plurals name="track_loop_count">
+        <item quantity="one">%d Loop</item>
+        <item quantity="other">%d Loops</item>
+    </plurals>
+    <string name="cd_track_options">Track-Optionen</string>
+    <string name="cd_selected">Ausgewählt</string>
+    <string name="cd_not_selected">Nicht ausgewählt</string>
+
+    <string name="hint_long_press_marker">Marker zum verschieben gedrückt halten</string>
+    <string name="time_start">Start</string>
+    <string name="time_loop">Loop</string>
+    <string name="time_end">Ende</string>
+
+    <string name="play_counting_in">Zähle ein…</string>
+    <string name="play_stop">Stopp</string>
+    <string name="play_arrangement">Arrangement abspielen</string>
+    <string name="play_play">Abspielen</string>
+
+    <string name="chip_save">＋ Speichern</string>
+    <string name="cd_arrange">Arrangieren</string>
+    <string name="save_loop_title">Loop speichern</string>
+    <string name="rename_loop_title">Loop umbenennen</string>
+    <string name="loop_default_name">Loop %1$d</string>
+    <string name="toast_arrange_locked">Schalt Arrangieren aus, um das zu nutzen</string>
+
+    <string name="arrange_title">Arrangieren</string>
+    <string name="arrange_enabled">aktiv</string>
+    <string name="arrange_empty">Füge unten gespeicherte Loops hinzu, um eine Sequenz zu erstellen.</string>
+    <string name="arrange_deleted_loop">(gelöscht)</string>
+    <string name="arrange_add_step">Schritt hinzufügen</string>
+    <string name="arrange_repeat_whole">Ganze Sequenz wiederholen</string>
+    <string name="cd_move_up">Nach oben</string>
+    <string name="cd_move_down">Nach unten</string>
+    <string name="cd_remove_step">Schritt entfernen</string>
+
+    <string name="chip_snap">Raster</string>
+    <string name="chip_auto">Auto</string>
+    <string name="chip_tap">Tap</string>
+    <string name="chip_options">Optionen</string>
+    <string name="bpm_value">%1$d BPM</string>
+    <string name="menu_double_tempo">Tempo verdoppeln</string>
+    <string name="menu_halve_tempo">Tempo halbieren</string>
+    <!-- "Speed" bleibt stehen: daneben steht die BPM-Anzeige, und "Tempo" hieße dort zweierlei. -->
+    <string name="speed_label">Speed %1$s×</string>
+    <string name="speed_popup_label">"Speed  %1$s×"</string>
+
+    <string name="options_tab_countin">Einzählen</string>
+    <string name="options_tab_audio">Audio</string>
+    <string name="options_tab_chords">Akkorde</string>
+
+    <string name="chord_edit_bar">Akkorde bearbeiten — tippen zum Umbenennen oder Teilen; Grenze ziehen zum Verschieben</string>
+    <string name="chord_picker_title">Akkord</string>
+    <string name="chord_root">Grundton</string>
+    <string name="chord_quality">Typ</string>
+
+    <string name="chords_show_title">Akkordspur anzeigen</string>
+    <string name="chords_show_body">Akkorde erkennen und über der Wellenform anzeigen. Aus blendet sie ganz aus.</string>
+    <string name="chords_edit_title">Akkorde bearbeiten</string>
+    <string name="chords_edit_body">Tipp auf einen Akkord in der Spur, um ihn umzubenennen oder zu teilen; halte eine Grenze gedrückt, um sie zu ziehen (rastet am Beat ein).</string>
+    <string name="chords_persist_note">Deine Änderungen werden mit dem Track gespeichert und beim erneuten Öffnen wiederhergestellt.</string>
+    <string name="chords_redetect">Akkorde neu erkennen (Änderungen verwerfen)</string>
+
+    <string name="countin_intro">Halte Abspielen gedrückt, um mit einem Einzähler zu starten: Klicks im Tempo des Tracks (%1$d BPM), bevor die Wiedergabe beginnt.</string>
+    <string name="countin_beats_per_bar">Schläge pro Takt</string>
+    <string name="countin_bars">Takte</string>
+
+    <string name="audio_intro">Hebe einen Track an, der zu leise abgemischt wurde.</string>
+    <string name="audio_peak_name">Peak</string>
+    <string name="audio_peak_desc">hebt ihn an, bis seine lauteste Stelle so laut ist wie möglich, ohne den Klang zu verändern.</string>
+    <string name="audio_loudness_name">Loudness</string>
+    <string name="audio_loudness_desc">geht stattdessen nach dem Durchschnittspegel — das kann einen Track anheben, bei dem Peak nichts mehr zu geben hat, um den Preis, dass die schärfsten Spitzen etwas zurückgenommen werden.</string>
+
+    <string name="audio_normalize_label">Normalisieren</string>
+    <string name="normalize_off">Aus</string>
+
+    <string name="audio_status_off">Wiedergabe mit dem eigenen Pegel des Tracks.</string>
+    <string name="audio_status_peak_no_headroom">Dieser Track erreicht bereits volle Lautstärke, Peak hat also keinen Spielraum. Probier Loudness.</string>
+    <string name="audio_status_at_target">Dieser Track ist bereits auf dem Zielpegel.</string>
+    <string name="audio_status_boosting">Dieser Track wird um %1$s angehoben.</string>
+
+</resources>

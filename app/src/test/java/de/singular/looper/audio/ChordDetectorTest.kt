@@ -224,11 +224,33 @@ class ChordDetectorTest {
     }
 
     @Test fun chordNamesReadCorrectly() {
-        assertEquals("C", Chord(0, Quality.MAJ).name)
-        assertEquals("Am", Chord(9, Quality.MIN).name)
-        assertEquals("F#", Chord(6, Quality.MAJ).name)
-        assertEquals("Fmaj7", Chord(5, Quality.MAJ7).name)
-        assertEquals("Dm7", Chord(2, Quality.MIN7).name)
-        assertEquals("", Chord.NONE.name)
+        assertEquals("C", Chord(0, Quality.MAJ).name())
+        assertEquals("Am", Chord(9, Quality.MIN).name())
+        assertEquals("F#", Chord(6, Quality.MAJ).name())
+        assertEquals("Fmaj7", Chord(5, Quality.MAJ7).name())
+        assertEquals("Dm7", Chord(2, Quality.MIN7).name())
+        assertEquals("", Chord.NONE.name())
+    }
+
+    @Test fun germanNamingSwapsOnlyBAndH() {
+        val de = NoteNaming.GERMAN
+        // The one real difference: pitch class 11 is H, and 10 (A#/B flat) takes over the letter B.
+        assertEquals("H", Chord(11, Quality.MAJ).name(de))
+        assertEquals("B", Chord(10, Quality.MAJ).name(de))
+        // Everything else is spelled the same as it is internationally.
+        assertEquals("C", Chord(0, Quality.MAJ).name(de))
+        assertEquals("Am", Chord(9, Quality.MIN).name(de))
+        assertEquals("F#", Chord(6, Quality.MAJ).name(de))
+        // Qualities are chord symbols, not note names, so they are untouched by the spelling.
+        assertEquals("Hm7", Chord(11, Quality.MIN7).name(de))
+        assertEquals("Bmaj7", Chord(10, Quality.MAJ7).name(de))
+        assertEquals("", Chord.NONE.name(de))
+    }
+
+    @Test fun namingIsDisplayOnlyAndReversible() {
+        // Same stored chord, two spellings — nothing about the chord itself changes.
+        val chord = Chord(11, Quality.MAJ)
+        assertEquals("B", chord.name(NoteNaming.INTERNATIONAL))
+        assertEquals("H", chord.name(NoteNaming.GERMAN))
     }
 }

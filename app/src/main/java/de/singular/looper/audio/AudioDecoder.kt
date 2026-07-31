@@ -22,7 +22,19 @@ object AudioDecoder {
 
     private const val TIMEOUT_US = 10_000L
 
-    class DecodeException(message: String, cause: Throwable? = null) : Exception(message, cause)
+    /**
+     * Why a decode failed, in the terms the UI cares about: either we never got at the file, or we
+     * got at it and could not make audio out of it. [DecodeException]'s message keeps the precise
+     * cause for the log; the enum is what picks the message the user sees, so that message can be
+     * translated rather than being whatever the platform codec happened to say.
+     */
+    enum class DecodeFailure { CANNOT_OPEN, DECODE_FAILED }
+
+    class DecodeException(
+        val failure: DecodeFailure,
+        message: String,
+        cause: Throwable? = null,
+    ) : Exception(message, cause)
 
     /**
      * @param bucketCount number of display columns to produce for the envelope.
@@ -39,16 +51,16 @@ object AudioDecoder {
         try {
             context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
                 extractor.setDataSource(pfd.fileDescriptor)
-            } ?: throw DecodeException("Could not open file")
+            } ?: throw DecodeException(DecodeFailure.CANNOT_OPEN, "Could not open file")
 
             val trackIndex = (0 until extractor.trackCount).firstOrNull { i ->
                 extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: throw DecodeException("No audio track found in file")
+            } ?: throw DecodeException(DecodeFailure.DECODE_FAILED, "No audio track found in file")
 
             extractor.selectTrack(trackIndex)
             val inputFormat = extractor.getTrackFormat(trackIndex)
             val mime = inputFormat.getString(MediaFormat.KEY_MIME)
-                ?: throw DecodeException("Missing MIME type")
+                ?: throw DecodeException(DecodeFailure.DECODE_FAILED, "Missing MIME type")
             val sampleRate = inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             val channels = inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             val durationUs =
@@ -105,7 +117,7 @@ object AudioDecoder {
                 }
             }
 
-            if (pcmSize == 0) throw DecodeException("Decoded no audio samples")
+            if (pcmSize == 0) throw DecodeException(DecodeFailure.DECODE_FAILED, "Decoded no audio samples")
             if (pcmSize != pcm.size) pcm = pcm.copyOf(pcmSize)
 
             val durationMs = if (durationUs > 0) durationUs / 1000
@@ -117,7 +129,7 @@ object AudioDecoder {
         } catch (e: DecodeException) {
             throw e
         } catch (e: Exception) {
-            throw DecodeException("Failed to decode audio: ${e.message}", e)
+            throw DecodeException(DecodeFailure.DECODE_FAILED, "Failed to decode audio: ${e.message}", e)
         } finally {
             try { codec?.stop() } catch (_: Exception) {}
             try { codec?.release() } catch (_: Exception) {}

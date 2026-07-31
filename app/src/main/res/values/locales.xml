@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      The languages the picker offers, as BCP-47 tags. Adding a translation is two steps: create
+      res/values-<tag>/strings.xml, and add the tag here.
+
+      Kept as an explicit list rather than discovered at runtime on purpose. The resource table
+      also carries every locale our AndroidX dependencies ship — around eighty of them — so asking
+      the framework which locales exist would offer the user dozens of languages in which only the
+      odd system-supplied button is actually translated. This list says what *we* have translated.
+
+      The device's own language is offered separately and is not listed here.
+    -->
+    <string-array name="supported_locales" translatable="false">
+        <item>en</item>
+        <item>de</item>
+    </string-array>
+
+</resources>

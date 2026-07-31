@@ -8,7 +8,10 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.annotation.StringRes
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -67,9 +70,11 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
@@ -103,6 +108,7 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -142,6 +148,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -151,6 +160,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.TextAutoSize
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import androidx.browser.customtabs.CustomTabColorSchemeParams
@@ -164,7 +176,9 @@ import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.Chord
 import de.singular.looper.audio.NormalizeMode
+import de.singular.looper.audio.NoteNaming
 import de.singular.looper.audio.Quality
+import de.singular.looper.audio.rootNames
 import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.ArrangementStep
 import de.singular.looper.library.SavedLoop
@@ -209,7 +223,7 @@ private const val EDGE_INSET_FRACTION = 0.5f
 /** Dim factor for controls locked out while an arrangement is enabled. */
 private const val LOCKED_ALPHA = 0.4f
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     /**
      * A track another app has handed us, waiting to be imported.
      *
@@ -280,6 +294,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val saveZoom by viewModel.saveZoom.collectAsStateWithLifecycle()
     val edgeInset by viewModel.edgeInset.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val noteNaming by viewModel.noteNaming.collectAsStateWithLifecycle()
     val library by viewModel.libraryTracks.collectAsStateWithLifecycle()
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
@@ -330,9 +345,9 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     val backupResult by viewModel.backupResult.collectAsStateWithLifecycle()
     LaunchedEffect(backupResult) {
         val message = when (backupResult) {
-            BackupResult.EXPORTED -> "Library backed up"
-            BackupResult.RESTORED -> "Library restored"
-            BackupResult.FAILED -> "Backup failed — check the file and try again"
+            BackupResult.EXPORTED -> R.string.backup_exported
+            BackupResult.RESTORED -> R.string.backup_restored
+            BackupResult.FAILED -> R.string.backup_failed
             null -> return@LaunchedEffect
         }
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -342,23 +357,20 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
     if (confirmRestore) {
         AlertDialog(
             onDismissRequest = { confirmRestore = false },
-            title = { Text("Restore backup?") },
-            text = {
-                Text(
-                    "This replaces your entire current library — all imported tracks and saved " +
-                        "loops — with the contents of the backup. This can't be undone.",
-                )
-            },
+            title = { Text(stringResource(R.string.restore_confirm_title)) },
+            text = { Text(stringResource(R.string.restore_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRestore = false
                     importLauncher.launch(
                         arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed"),
                     )
-                }) { Text("Choose backup") }
+                }) { Text(stringResource(R.string.restore_choose)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRestore = false }) { Text("Cancel") }
+                TextButton(onClick = { confirmRestore = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }
@@ -372,6 +384,8 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             saveZoom = saveZoom,
             edgeInset = edgeInset,
             themeMode = themeMode,
+            germanNotes = noteNaming == NoteNaming.GERMAN,
+            onToggleGermanNotes = { viewModel.setGermanNotes(noteNaming != NoteNaming.GERMAN) },
             onToggleFollow = viewModel::toggleFollowPlayhead,
             onToggleKeepScreenOn = viewModel::toggleKeepScreenOn,
             onToggleSaveZoom = viewModel::toggleSaveZoom,
@@ -446,11 +460,17 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                     navigationIcon = {
                         if (selecting) {
                             IconButton(onClick = { selection = emptySet() }) {
-                                Icon(Icons.Default.Close, contentDescription = "Cancel selection")
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.cd_cancel_selection),
+                                )
                             }
                         } else {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                                Icon(
+                                    Icons.Default.Menu,
+                                    contentDescription = stringResource(R.string.cd_open_menu),
+                                )
                             }
                         }
                     },
@@ -459,7 +479,12 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                         // corner title steps aside there; it stays on a loaded track (its filename).
                         Text(
                             text = when {
-                                selecting -> "${selection.size} selected"
+                                selecting -> pluralStringResource(
+                                    R.plurals.selection_count,
+                                    selection.size,
+                                    selection.size,
+                                )
+
                                 else -> currentFileName(state) ?: ""
                             },
                             maxLines = 1,
@@ -471,7 +496,10 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                             IconButton(
                                 onClick = { pendingDelete = library.filter { it.id in selection } },
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete selected")
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.cd_delete_selected),
+                                )
                             }
                         }
                         // A quiet notice that the display is being kept awake (it drains battery);
@@ -482,7 +510,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                                 // the dark bar), matching the menu icon rather than an accent tone.
                                 Icon(
                                     painter = painterResource(R.drawable.ic_brightness_alert),
-                                    contentDescription = "Screen kept on",
+                                    contentDescription = stringResource(R.string.cd_screen_kept_on),
                                 )
                             }
                         }
@@ -515,13 +543,13 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                         ) {
                             RingSpinner()
                             Spacer(Modifier.height(16.dp))
-                            Text("Decoding…")
+                            Text(stringResource(R.string.state_decoding))
                         }
 
                         is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel)
 
                         is LooperUiState.Error -> Text(
-                            "Error: ${s.message}",
+                            stringResource(R.string.error_format, stringResource(s.message)),
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -548,15 +576,29 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
         val single = doomed.singleOrNull()
         AlertDialog(
             onDismissRequest = { pendingDelete = emptyList() },
-            title = { Text(if (single != null) "Delete track?" else "Delete ${doomed.size} tracks?") },
+            title = {
+                Text(
+                    if (single != null) {
+                        stringResource(R.string.delete_track_title)
+                    } else {
+                        pluralStringResource(
+                            R.plurals.delete_tracks_title,
+                            doomed.size,
+                            doomed.size,
+                        )
+                    },
+                )
+            },
             text = {
                 Text(
                     if (single != null) {
-                        "Remove \"${single.name}\" and its saved loops from your library? " +
-                            "The original file on your device is not affected."
+                        stringResource(R.string.delete_track_body, single.name)
                     } else {
-                        "Remove these ${doomed.size} tracks and their saved loops from your " +
-                            "library? The original files on your device are not affected."
+                        pluralStringResource(
+                            R.plurals.delete_tracks_body,
+                            doomed.size,
+                            doomed.size,
+                        )
                     },
                 )
             },
@@ -567,10 +609,12 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                         pendingDelete = emptyList()
                         selection = emptySet()
                     },
-                ) { Text("Delete") }
+                ) { Text(stringResource(R.string.action_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = emptyList() }) { Text("Cancel") }
+                TextButton(onClick = { pendingDelete = emptyList() }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }
@@ -584,20 +628,17 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
                     contentDescription = null,
                 )
             },
-            title = { Text("Screen stays on") },
-            text = {
-                Text(
-                    "“Keep screen on” is enabled, so the display won't dim or lock while a track " +
-                        "is open. Handy for practice, but it uses more battery.",
-                )
-            },
+            title = { Text(stringResource(R.string.keep_awake_title)) },
+            text = { Text(stringResource(R.string.keep_awake_body)) },
             confirmButton = {
                 TextButton(onClick = { showKeepAwakeInfo = false; showSettings = true }) {
-                    Text("Settings")
+                    Text(stringResource(R.string.settings_title))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showKeepAwakeInfo = false }) { Text("Got it") }
+                TextButton(onClick = { showKeepAwakeInfo = false }) {
+                    Text(stringResource(R.string.action_got_it))
+                }
             },
         )
     }
@@ -608,8 +649,8 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
  *
  * The split is by *when you come here*, not by what the settings technically are. **Playback** is
  * what the waveform does while a track is running — the things you change with an instrument in
- * hand, mid-practice. **System** is the app's own set-up: how it looks, and where the library goes.
- * One is visited often and the other is visited twice.
+ * hand, mid-practice. **System** is the app's own set-up: how it looks, what language it speaks,
+ * and where the library goes. One is visited often and the other is visited twice.
  *
  * Keep-screen-on sits under System rather than Playback, which is the one placement worth arguing:
  * it is about a track being played, but it is a display setting that costs battery, set once for
@@ -621,10 +662,10 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
  * halves, with nothing about "System" that says the app's version and its bug tracker are in there.
  * A tab is one tap from either half and says its own name whichever half is showing.
  */
-private enum class SettingsTab(val title: String) {
-    PLAYBACK("Playback"),
-    SYSTEM("System"),
-    ABOUT("About"),
+private enum class SettingsTab(@StringRes val title: Int) {
+    PLAYBACK(R.string.settings_tab_playback),
+    SYSTEM(R.string.settings_tab_system),
+    ABOUT(R.string.settings_tab_about),
 }
 
 /**
@@ -640,6 +681,8 @@ private fun SettingsScreen(
     saveZoom: Boolean,
     edgeInset: Boolean,
     themeMode: ThemeMode,
+    germanNotes: Boolean,
+    onToggleGermanNotes: () -> Unit,
     onToggleFollow: () -> Unit,
     onToggleKeepScreenOn: () -> Unit,
     onToggleSaveZoom: () -> Unit,
@@ -658,10 +701,13 @@ private fun SettingsScreen(
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
                     }
                 },
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
             )
         },
     ) { innerPadding ->
@@ -675,7 +721,7 @@ private fun SettingsScreen(
                     Tab(
                         selected = tab == entry,
                         onClick = { tab = entry },
-                        text = { Text(entry.title) },
+                        text = { Text(stringResource(entry.title)) },
                     )
                 }
             }
@@ -685,50 +731,58 @@ private fun SettingsScreen(
             when (tab) {
                 SettingsTab.PLAYBACK -> SettingsPage {
                     SettingSwitchRow(
-                        "Follow playhead",
+                        stringResource(R.string.setting_follow_playhead),
                         Icons.Default.MyLocation,
                         following,
                         onToggleFollow,
                     )
                     SettingSwitchRow(
-                        "Save zoom level",
+                        stringResource(R.string.setting_save_zoom),
                         Icons.Default.ZoomIn,
                         saveZoom,
                         onToggleSaveZoom,
                     )
                     SettingSwitchRow(
-                        "Add padding to waveform",
+                        stringResource(R.string.setting_edge_inset),
                         ImageVector.vectorResource(R.drawable.ic_fit_width),
                         edgeInset,
                         onToggleEdgeInset,
                     )
+                    SettingSwitchRow(
+                        stringResource(R.string.setting_german_notes),
+                        Icons.Default.MusicNote,
+                        germanNotes,
+                        onToggleGermanNotes,
+                    )
                 }
 
                 SettingsTab.SYSTEM -> SettingsPage {
-                    DrawerSectionLabel("Appearance")
+                    DrawerSectionLabel(stringResource(R.string.section_appearance))
                     ThemeModeChips(
                         mode = themeMode,
                         onSelect = onSelectTheme,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     )
+                    DrawerSectionLabel(stringResource(R.string.section_general))
                     SettingSwitchRow(
-                        "Keep screen on",
+                        stringResource(R.string.setting_keep_screen_on),
                         ImageVector.vectorResource(R.drawable.ic_brightness_alert),
                         keepScreenOn,
                         onToggleKeepScreenOn,
                     )
+                    LanguageSetting()
 
-                    DrawerSectionLabel("Backup & Restore")
-                    BackupChoiceRow(
+                    DrawerSectionLabel(stringResource(R.string.section_backup))
+                    ChoiceRow(
                         icon = Icons.Default.Save,
-                        title = "Back up library",
-                        subtitle = "Save all tracks and loops to a file",
+                        title = stringResource(R.string.backup_row_title),
+                        subtitle = stringResource(R.string.backup_row_subtitle),
                         onClick = onBackup,
                     )
-                    BackupChoiceRow(
+                    ChoiceRow(
                         icon = Icons.Default.Restore,
-                        title = "Restore library",
-                        subtitle = "Replace everything from a backup file",
+                        title = stringResource(R.string.restore_row_title),
+                        subtitle = stringResource(R.string.restore_row_subtitle),
                         onClick = onRestore,
                     )
                 }
@@ -736,6 +790,108 @@ private fun SettingsScreen(
                 SettingsTab.ABOUT -> AboutPage()
             }
         }
+    }
+}
+
+/**
+ * One offered language: its BCP-47 [tag], or null for "follow the device".
+ *
+ * [label] is deliberately the language's name *in that language* — Deutsch, not German. Someone who
+ * has landed in a language they can't read needs to find their way out, and the only word on the
+ * screen they are sure to recognise is their own language's name for itself.
+ */
+private data class LanguageChoice(val tag: String?, val label: String)
+
+/**
+ * The languages on offer: the device default, then everything listed in `supported_locales`,
+ * sorted by how each names itself.
+ */
+@Composable
+private fun rememberLanguageChoices(): List<LanguageChoice> {
+    val systemLabel = stringResource(R.string.language_system)
+    val tags = stringArrayResource(R.array.supported_locales)
+    return remember(systemLabel, tags) {
+        val offered = tags.map { tag ->
+            val locale = Locale.forLanguageTag(tag)
+            // Ask the locale to name itself, then fix the case: several languages write their own
+            // name lowercase mid-sentence (français, español) but expect a capital when it stands
+            // alone as a label.
+            val own = locale.getDisplayName(locale).replaceFirstChar { it.titlecase(locale) }
+            LanguageChoice(tag, own)
+        }.sortedBy { it.label }
+        listOf(LanguageChoice(null, systemLabel)) + offered
+    }
+}
+
+/** The current app language as a BCP-47 tag, or null when it is following the device. */
+private fun currentLanguageTag(): String? =
+    AppCompatDelegate.getApplicationLocales().toLanguageTags().takeIf { it.isNotEmpty() }
+        ?.substringBefore(',')
+
+/**
+ * The language row and its picker.
+ *
+ * Applying a choice goes through [AppCompatDelegate], not a preference of our own: on Android 13+
+ * that writes through to the system's per-app language, so this picker and the one in Android's
+ * own Settings agree with each other instead of quietly disagreeing. Selecting recreates the
+ * activity, which is what re-reads the resources — so there is nothing to do afterwards.
+ */
+@Composable
+private fun LanguageSetting() {
+    val choices = rememberLanguageChoices()
+    // Read once per composition rather than held in state: the activity is recreated on change,
+    // so this is re-read with the new value on the way back up.
+    val currentTag = currentLanguageTag()
+    val current = choices.firstOrNull { it.tag == currentTag } ?: choices.first()
+    var picking by remember { mutableStateOf(false) }
+
+    ChoiceRow(
+        icon = Icons.Default.Language,
+        title = stringResource(R.string.setting_language),
+        subtitle = current.label,
+        onClick = { picking = true },
+    )
+
+    if (picking) {
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text(stringResource(R.string.setting_language)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    choices.forEach { choice ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(ControlShape)
+                                .clickable {
+                                    picking = false
+                                    AppCompatDelegate.setApplicationLocales(
+                                        if (choice.tag == null) {
+                                            LocaleListCompat.getEmptyLocaleList()
+                                        } else {
+                                            LocaleListCompat.forLanguageTags(choice.tag)
+                                        },
+                                    )
+                                }
+                                .padding(horizontal = 8.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = choice.tag == current.tag,
+                                onClick = null, // the whole row is the target
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(choice.label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { picking = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 
@@ -805,11 +961,13 @@ private fun AboutPage(modifier: Modifier = Modifier) {
             modifier = Modifier.size(88.dp),
         )
         Spacer(Modifier.height(12.dp))
-        Text("Rubber Ring", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall)
         // Long-press to copy, mirroring the library's press-and-hold idiom. Android 13 and up
         // pops its own clipboard confirmation, so only older versions get a toast.
+        val versionClip = stringResource(R.string.about_version_clipboard, version)
+        val copiedToast = stringResource(R.string.toast_version_copied)
         Text(
-            "v$version",
+            stringResource(R.string.about_version, version),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
@@ -818,11 +976,9 @@ private fun AboutPage(modifier: Modifier = Modifier) {
                     onClick = {},
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        clipboard.setText(AnnotatedString("Rubber Ring $version"))
+                        clipboard.setText(AnnotatedString(versionClip))
                         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                            Toast
-                                .makeText(context, "Version copied", Toast.LENGTH_SHORT)
-                                .show()
+                            Toast.makeText(context, copiedToast, Toast.LENGTH_SHORT).show()
                         }
                     },
                 )
@@ -830,34 +986,27 @@ private fun AboutPage(modifier: Modifier = Modifier) {
         )
 
         Spacer(Modifier.height(28.dp))
-        AboutSection("About") {
-            AboutBody(
-                "I built Rubber Ring primarily for myself — maybe you'll find it just as " +
-                    "useful as I do.",
-            )
+        AboutSection(stringResource(R.string.about_section_about)) {
+            AboutBody(stringResource(R.string.about_body_about))
         }
-        AboutSection("Website") {
-            AboutBody("The app lives here:")
+        AboutSection(stringResource(R.string.about_section_website)) {
+            AboutBody(stringResource(R.string.about_body_website))
             AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
         }
-        AboutSection("Bugs") {
-            AboutBody("Found a hiccup? Let me know:")
+        AboutSection(stringResource(R.string.about_section_bugs)) {
+            AboutBody(stringResource(R.string.about_body_bugs))
             AboutLink(ISSUES_URL) { uriHandler.openUri(ISSUES_URL) }
         }
-        AboutSection("Support") {
-            AboutBody("If you can, support its development:")
+        AboutSection(stringResource(R.string.about_section_support)) {
+            AboutBody(stringResource(R.string.about_body_support))
             AboutLink(KOFI_URL) { uriHandler.openUri(KOFI_URL) }
         }
         // GPL §5 requires a derivative to preserve legal notices, so a licence stated *in the
         // app* rather than only in the repo is worth more than it looks: a clone that stripped
         // this screen has done so deliberately, and the before-and-after is a screenshot.
-        AboutSection("License") {
-            AboutBody("Copyright © 2025–2026 Kreuder")
-            AboutBody(
-                "Rubber Ring is free software under the GPL-3.0-only. The wordmark and the " +
-                    "icon are CC BY 4.0; the name is not licensed, so a fork needs its own. " +
-                    "Built with AndroidX and Jetpack Compose, licensed under Apache 2.0.",
-            )
+        AboutSection(stringResource(R.string.about_section_license)) {
+            AboutBody(stringResource(R.string.about_copyright))
+            AboutBody(stringResource(R.string.about_license_body))
             AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
         }
     }
@@ -915,7 +1064,7 @@ private fun LooperDrawer(
     ModalDrawerSheet(Modifier.fillMaxWidth(0.8f)) {
         Column(Modifier.fillMaxSize()) {
             Text(
-                "Rubber Ring",
+                stringResource(R.string.app_name),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(start = 28.dp, top = 20.dp, bottom = 12.dp),
             )
@@ -923,7 +1072,7 @@ private fun LooperDrawer(
             val itemPadding = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
             if (showLibrary) {
                 NavigationDrawerItem(
-                    label = { Text("Library") },
+                    label = { Text(stringResource(R.string.drawer_library)) },
                     icon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
                     selected = false,
                     onClick = onLibrary,
@@ -931,21 +1080,21 @@ private fun LooperDrawer(
                 )
             }
             NavigationDrawerItem(
-                label = { Text("Import new file") },
+                label = { Text(stringResource(R.string.drawer_import)) },
                 icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
                 selected = false,
                 onClick = onImport,
                 modifier = itemPadding,
             )
             NavigationDrawerItem(
-                label = { Text("Settings") },
+                label = { Text(stringResource(R.string.settings_title)) },
                 icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                 selected = false,
                 onClick = onSettings,
                 modifier = itemPadding,
             )
             NavigationDrawerItem(
-                label = { Text("Support Rubber Ring") },
+                label = { Text(stringResource(R.string.drawer_support)) },
                 icon = {
                     Icon(
                         ImageVector.vectorResource(R.drawable.ic_heart_smile),
@@ -958,7 +1107,7 @@ private fun LooperDrawer(
             )
 
             if (recents.isNotEmpty()) {
-                DrawerSectionLabel("Recent")
+                DrawerSectionLabel(stringResource(R.string.section_recent))
                 recents.forEach { track ->
                     NavigationDrawerItem(
                         label = {
@@ -976,7 +1125,7 @@ private fun LooperDrawer(
             Spacer(Modifier.weight(1f))
             HorizontalDivider(Modifier.padding(horizontal = 16.dp))
             NavigationDrawerItem(
-                label = { Text("Quick help") },
+                label = { Text(stringResource(R.string.drawer_quick_help)) },
                 icon = { Icon(Icons.Default.HelpOutline, contentDescription = null) },
                 selected = false,
                 onClick = onQuickHelp,
@@ -1008,15 +1157,15 @@ private fun ThemeModeChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         val label = mapOf(
-            ThemeMode.SYSTEM to "System",
-            ThemeMode.LIGHT to "Light",
-            ThemeMode.DARK to "Dark",
+            ThemeMode.SYSTEM to R.string.theme_system,
+            ThemeMode.LIGHT to R.string.theme_light,
+            ThemeMode.DARK to R.string.theme_dark,
         )
         ThemeMode.entries.forEach { m ->
             FilterChip(
                 selected = mode == m,
                 onClick = { onSelect(m) },
-                label = { Text(label.getValue(m)) },
+                label = { Text(stringResource(label.getValue(m))) },
                 shape = ControlShape,
             )
         }
@@ -1063,55 +1212,52 @@ private fun SupportDialog(onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Keep this app alive") },
+        title = { Text(stringResource(R.string.support_title)) },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Text(
-                    "This app doesn't track. Anything.\n" +
-                        "The downside is I have no idea if or how often it's used or downloaded.\n" +
-                        "Could be zero, could be a secret cult following. I genuinely don't know.",
+                    stringResource(R.string.support_intro),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "Am I wasting my time publishing it? You tell me.",
+                    stringResource(R.string.support_question),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "There are three (maybe more) ways to keep me motivated:",
+                    stringResource(R.string.support_ways),
                     style = MaterialTheme.typography.bodyMedium,
                 )
 
                 SupportWay(
-                    title = "The easy way",
-                    action = "Give it a like",
+                    title = stringResource(R.string.support_easy_title),
+                    action = stringResource(R.string.support_easy_action),
                     icon = Icons.Default.Favorite,
                     // The one that costs nothing, so it gets the filled button.
                     emphasised = true,
-                    note = "Opens a page on my website with a like button. Nothing is counted " +
-                        "until you press it — just the press and an anonymised IP.",
+                    note = stringResource(R.string.support_easy_note),
                     onClick = { openCustomTab(context, LIKE_URL, toolbarColor) },
                 )
                 SupportWay(
-                    title = "The nerdy way",
-                    action = "Star it on GitHub",
+                    title = stringResource(R.string.support_nerdy_title),
+                    action = stringResource(R.string.support_nerdy_action),
                     icon = Icons.Default.Star,
-                    note = "A star is a number I can actually see, and it helps others find it.",
+                    note = stringResource(R.string.support_nerdy_note),
                     onClick = { openCustomTab(context, REPO_URL, toolbarColor) },
                 )
                 SupportWay(
-                    title = "The generous way",
-                    action = "Support it on Ko-fi",
+                    title = stringResource(R.string.support_generous_title),
+                    action = stringResource(R.string.support_generous_action),
                     icon = Icons.Default.Paid,
-                    note = "Entirely optional. The app is and stays free either way.",
+                    note = stringResource(R.string.support_generous_note),
                     onClick = { openCustomTab(context, KOFI_URL, toolbarColor) },
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
         },
     )
 }
@@ -1169,7 +1315,7 @@ private fun openCustomTab(context: android.content.Context, url: String, toolbar
     try {
         intent.launchUrl(context, Uri.parse(url))
     } catch (_: android.content.ActivityNotFoundException) {
-        Toast.makeText(context, "No browser found", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, R.string.toast_no_browser, Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -1177,43 +1323,37 @@ private fun openCustomTab(context: android.content.Context, url: String, toolbar
 private fun QuickHelpDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Quick help") },
+        title = { Text(stringResource(R.string.help_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 HelpItem(
-                    "Move a marker",
-                    "Long-press a marker's grip tab (or its line) until it grabs, then drag it. " +
-                        "The short hold prevents accidental nudges.",
+                    stringResource(R.string.help_marker_title),
+                    stringResource(R.string.help_marker_body),
                 )
                 HelpItem(
-                    "Move the playhead",
-                    "Tap anywhere in open space to jump the playhead there, or drag near the " +
-                        "playhead line to scrub it.",
+                    stringResource(R.string.help_playhead_title),
+                    stringResource(R.string.help_playhead_body),
                 )
                 HelpItem(
-                    "Start with a count-in",
-                    "Long-press Play to hear a count-in before the audio comes in; a normal tap " +
-                        "starts straight away. Set its meter and length under Options.",
+                    stringResource(R.string.help_countin_title),
+                    stringResource(R.string.help_countin_body),
                 )
                 HelpItem(
-                    "Zoom & scroll",
-                    "Pinch with two fingers to zoom the waveform in and out. When zoomed in, " +
-                        "drag in open space to scroll, or use the minimap strip at the bottom.",
+                    stringResource(R.string.help_zoom_title),
+                    stringResource(R.string.help_zoom_body),
                 )
                 HelpItem(
-                    "Save a loop",
-                    "Set the start and end markers, then tap Save to store the region under a " +
-                        "name. Saved loops belong to the current track.",
+                    stringResource(R.string.help_save_loop_title),
+                    stringResource(R.string.help_save_loop_body),
                 )
                 HelpItem(
-                    "Recall a loop",
-                    "Tap a saved loop to jump its markers back into place. Long-press it for " +
-                        "rename and delete options.",
+                    stringResource(R.string.help_recall_loop_title),
+                    stringResource(R.string.help_recall_loop_body),
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Got it") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_got_it)) }
         },
     )
 }
@@ -1300,22 +1440,24 @@ private fun LibraryContent(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "a play-along looper",
+            stringResource(R.string.app_tagline),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(20.dp))
         Text(
-            "Pick an audio file to mark and loop a section.",
+            stringResource(R.string.library_intro),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(20.dp))
-        Button(onClick = onImport, shape = ControlShape) { Text("Import new file") }
+        Button(onClick = onImport, shape = ControlShape) {
+            Text(stringResource(R.string.drawer_import))
+        }
         Spacer(Modifier.height(10.dp))
         Text(
-            "Supports MP3, AAC (M4A), FLAC, WAV, and OGG.",
+            stringResource(R.string.library_formats),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -1326,7 +1468,7 @@ private fun LibraryContent(
         } else {
             Spacer(Modifier.height(24.dp))
             Text(
-                "Library",
+                stringResource(R.string.library_heading),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1353,7 +1495,7 @@ private fun LibraryContent(
 
     renameTarget?.let { target ->
         LoopNameDialog(
-            title = "Rename track",
+            title = stringResource(R.string.rename_track_title),
             initial = target.name,
             onConfirm = { onRename(target, it); renameTarget = null },
             onDismiss = { renameTarget = null },
@@ -1361,9 +1503,9 @@ private fun LibraryContent(
     }
 }
 
-/** One selectable option (icon + title + subtitle) in the backup/restore section. */
+/** One selectable option: icon + title + subtitle, the whole row tappable. */
 @Composable
-private fun BackupChoiceRow(
+private fun ChoiceRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,
@@ -1429,10 +1571,15 @@ private fun LibraryRow(
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyLarge,
                 )
+                val loops = track.savedLoops.size
+                val loopCount = if (loops > 0) {
+                    pluralStringResource(R.plurals.track_loop_count, loops, loops)
+                } else {
+                    null
+                }
                 val info = buildList {
                     if (track.durationMs > 0) add(formatMs(track.durationMs))
-                    val loops = track.savedLoops.size
-                    if (loops > 0) add(if (loops == 1) "1 Loop" else "$loops Loops")
+                    if (loopCount != null) add(loopCount)
                 }.joinToString(" | ")
                 // Show the metadata on the left; when a custom title is set, put the original
                 // file name on the right (otherwise it would just repeat the label above).
@@ -1465,7 +1612,9 @@ private fun LibraryRow(
                 Box(Modifier.padding(12.dp)) {
                     Icon(
                         if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = if (selected) "Selected" else "Not selected",
+                        contentDescription = stringResource(
+                            if (selected) R.string.cd_selected else R.string.cd_not_selected,
+                        ),
                         tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1473,16 +1622,19 @@ private fun LibraryRow(
             } else {
                 Box {
                     IconButton(onClick = { menu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Track options")
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.cd_track_options),
+                        )
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(
-                            text = { Text("Rename") },
+                            text = { Text(stringResource(R.string.action_rename)) },
                             leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                             onClick = { menu = false; onRename() },
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete") },
+                            text = { Text(stringResource(R.string.action_delete)) },
                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
                             onClick = { menu = false; onDelete() },
                         )
@@ -1502,6 +1654,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val currentChord by viewModel.currentChord.collectAsStateWithLifecycle()
     val chordEditMode by viewModel.chordEditMode.collectAsStateWithLifecycle()
     val showChords by viewModel.showChords.collectAsStateWithLifecycle()
+    val noteNaming by viewModel.noteNaming.collectAsStateWithLifecycle()
     val detecting by viewModel.detecting.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val loops by viewModel.savedLoops.collectAsStateWithLifecycle()
@@ -1528,7 +1681,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     // The Arrange button is icon-only (a numbered-list glyph), so the notice names it in words —
     // a real icon can't render in a toast on modern Android.
     val notifyLocked: () -> Unit = {
-        Toast.makeText(context, "Turn off Arrange to use this", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, R.string.toast_arrange_locked, Toast.LENGTH_SHORT).show()
     }
 
     val intervalFrac = if (grid.bpm > 0f && durationMs > 0)
@@ -1593,6 +1746,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
                 gridIntervalFrac = if (grid.enabled) intervalFrac else 0f,
                 gridLinesPerBeat = grid.subdivision,
                 chords = if (showChords) chords?.spans ?: emptyList() else emptyList(),
+                noteNaming = noteNaming,
                 chordEditMode = chordEditMode && showChords,
                 onChordTap = { index, frac -> chordEdit = index to frac },
                 onChordBoundaryMove = viewModel::moveChordBoundary,
@@ -1617,7 +1771,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             // it has to read as a passing note over both waveform palettes, not as a control.
             if (hintAlpha > 0f) {
                 Text(
-                    "Long-press a marker to move it",
+                    stringResource(R.string.hint_long_press_marker),
                     color = MaterialTheme.colorScheme.inverseOnSurface,
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier
@@ -1636,9 +1790,15 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            TimeLabel("Start", (region.startFrac * durationMs).toLong())
-            TimeLabel("Loop", ((region.endFrac - region.startFrac) * durationMs).toLong())
-            TimeLabel("End", (region.endFrac * durationMs).toLong())
+            TimeLabel(
+                stringResource(R.string.time_start),
+                (region.startFrac * durationMs).toLong(),
+            )
+            TimeLabel(
+                stringResource(R.string.time_loop),
+                ((region.endFrac - region.startFrac) * durationMs).toLong(),
+            )
+            TimeLabel(stringResource(R.string.time_end), (region.endFrac * durationMs).toLong())
         }
 
         Spacer(Modifier.height(8.dp))
@@ -1648,7 +1808,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         // is reserved so the transport doesn't shift as chords come and go (or before analysis lands).
         if (showChords) {
             Box(Modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.Center) {
-                val name = currentChord?.name.orEmpty()
+                val name = currentChord?.name(noteNaming).orEmpty()
                 if (name.isNotEmpty()) {
                     Text(
                         name,
@@ -1697,12 +1857,14 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    when {
-                        countingIn -> "Counting in…"
-                        isPlaying -> "Stop"
-                        arrangeMode -> "Play arrangement"
-                        else -> "Play"
-                    },
+                    stringResource(
+                        when {
+                            countingIn -> R.string.play_counting_in
+                            isPlaying -> R.string.play_stop
+                            arrangeMode -> R.string.play_arrangement
+                            else -> R.string.play_play
+                        },
+                    ),
                     color = MaterialTheme.colorScheme.onPrimary,
                 )
             }
@@ -1769,6 +1931,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     chordEdit?.let { (index, frac) ->
         ChordPickerDialog(
             current = chords?.spans?.getOrNull(index)?.chord,
+            noteNaming = noteNaming,
             canMerge = index < (chords?.spans?.size ?: 0) - 1,
             onSet = { viewModel.setChordAt(index, it); chordEdit = null },
             onClear = { viewModel.setChordAt(index, Chord.NONE); chordEdit = null },
@@ -1825,7 +1988,7 @@ private fun LoopChips(
             if (canAdd) {
                 AssistChip(
                     onClick = { if (locked) onLocked() else showSaveDialog = true },
-                    label = { Text("＋ Save") },
+                    label = { Text(stringResource(R.string.chip_save)) },
                     shape = ControlShape,
                     modifier = Modifier.alpha(if (locked) LOCKED_ALPHA else 1f),
                 )
@@ -1847,7 +2010,10 @@ private fun LoopChips(
                     Modifier.height(32.dp).padding(horizontal = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.FormatListNumbered, contentDescription = "Arrange")
+                    Icon(
+                        Icons.Filled.FormatListNumbered,
+                        contentDescription = stringResource(R.string.cd_arrange),
+                    )
                 }
             }
         }
@@ -1855,15 +2021,15 @@ private fun LoopChips(
 
     if (showSaveDialog) {
         LoopNameDialog(
-            title = "Save loop",
-            initial = "Loop ${loops.size + 1}",
+            title = stringResource(R.string.save_loop_title),
+            initial = stringResource(R.string.loop_default_name, loops.size + 1),
             onConfirm = { onSave(it); showSaveDialog = false },
             onDismiss = { showSaveDialog = false },
         )
     }
     renameTarget?.let { target ->
         LoopNameDialog(
-            title = "Rename loop",
+            title = stringResource(R.string.rename_loop_title),
             initial = target.label,
             onConfirm = { onRename(target.id, it); renameTarget = null },
             onDismiss = { renameTarget = null },
@@ -1908,10 +2074,13 @@ private fun ArrangeSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Arrange", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    stringResource(R.string.arrange_title),
+                    style = MaterialTheme.typography.titleLarge,
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "enabled",
+                        stringResource(R.string.arrange_enabled),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1926,7 +2095,7 @@ private fun ArrangeSheet(
 
             if (steps.isEmpty()) {
                 Text(
-                    "Add saved loops below to build a practice sequence.",
+                    stringResource(R.string.arrange_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1948,32 +2117,52 @@ private fun ArrangeSheet(
                                     onClick = { onMoveStep(step.stepId, -1) },
                                     enabled = i > 0,
                                     modifier = Modifier.size(28.dp),
-                                ) { Icon(Icons.Default.KeyboardArrowUp, "Move up") }
+                                ) {
+                                    Icon(
+                                        Icons.Default.KeyboardArrowUp,
+                                        stringResource(R.string.cd_move_up),
+                                    )
+                                }
                                 IconButton(
                                     onClick = { onMoveStep(step.stepId, 1) },
                                     enabled = i < steps.lastIndex,
                                     modifier = Modifier.size(28.dp),
-                                ) { Icon(Icons.Default.KeyboardArrowDown, "Move down") }
+                                ) {
+                                    Icon(
+                                        Icons.Default.KeyboardArrowDown,
+                                        stringResource(R.string.cd_move_down),
+                                    )
+                                }
                             }
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                nameById[step.loopId] ?: "(deleted)",
+                                nameById[step.loopId] ?: stringResource(R.string.arrange_deleted_loop),
                                 Modifier.weight(1f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount - 1) }) { Text("−") }
-                            Text("×${step.repeatCount}", style = MaterialTheme.typography.titleSmall)
-                            TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount + 1) }) { Text("+") }
+                            TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount - 1) }) {
+                                Text(stringResource(R.string.button_decrement))
+                            }
+                            Text(
+                                stringResource(R.string.arrange_repeat_count, step.repeatCount),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            TextButton(onClick = { onSetRepeat(step.stepId, step.repeatCount + 1) }) {
+                                Text(stringResource(R.string.button_increment))
+                            }
                             IconButton(onClick = { onRemoveStep(step.stepId) }) {
-                                Icon(Icons.Default.Close, "Remove step")
+                                Icon(Icons.Default.Close, stringResource(R.string.cd_remove_step))
                             }
                         }
                     }
                 }
             }
 
-            Text("Add step", style = MaterialTheme.typography.labelMedium)
+            Text(
+                stringResource(R.string.arrange_add_step),
+                style = MaterialTheme.typography.labelMedium,
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 loops.forEach { loop ->
                     AssistChip(
@@ -1988,7 +2177,7 @@ private fun ArrangeSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = repeatWhole, onCheckedChange = onToggleRepeatWhole)
                 Spacer(Modifier.width(8.dp))
-                Text("Repeat whole sequence")
+                Text(stringResource(R.string.arrange_repeat_whole))
             }
         }
     }
@@ -2031,8 +2220,14 @@ private fun LoopChip(
             )
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
-            DropdownMenuItem(text = { Text("Delete") }, onClick = { menu = false; onDelete() })
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.action_rename)) },
+                onClick = { menu = false; onRename() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.action_delete)) },
+                onClick = { menu = false; onDelete() },
+            )
         }
     }
 }
@@ -2057,8 +2252,12 @@ private fun LoopNameDialog(
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             )
         },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text) }) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
     )
 }
 
@@ -2114,7 +2313,7 @@ private fun SpeedLink(
                 Spacer(Modifier.width(6.dp))
             }
             Text(
-                "Speed ${formatSpeed(speed)}×",
+                stringResource(R.string.speed_label, formatSpeed(speed)),
                 style = MaterialTheme.typography.labelLarge,
                 color = tint,
                 maxLines = 1,
@@ -2122,7 +2321,10 @@ private fun SpeedLink(
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             Column(Modifier.padding(horizontal = 16.dp).width(220.dp)) {
-                Text("Speed  ${formatSpeed(shown)}×", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    stringResource(R.string.speed_popup_label, formatSpeed(shown)),
+                    style = MaterialTheme.typography.labelMedium,
+                )
                 Slider(
                     value = shown,
                     onValueChange = { dragValue = it },
@@ -2160,13 +2362,28 @@ private fun BeatControls(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Four chips share the width equally, so the longest label decides whether any of them
+            // fit — and the longest label is whatever the current translation makes it ("Options"
+            // fits, "Optionen" wraps to "Optione / n"). Rather than picking words short enough for
+            // one language, the label shrinks a step or two when it has to. The floor is where it
+            // stops being readable at arm's length on a music stand, which is the real constraint.
             val chipLabel: @Composable (String) -> Unit = { t ->
-                Text(t, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text(
+                    t,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(
+                        minFontSize = 11.sp,
+                        maxFontSize = 14.sp, // labelLarge, the chips' natural size
+                        stepSize = 0.5.sp,
+                    ),
+                )
             }
             FilterChip(
                 selected = grid.enabled,
                 onClick = { if (locked) onLocked() else viewModel.toggleSnap() },
-                label = { chipLabel("Snap") },
+                label = { chipLabel(stringResource(R.string.chip_snap)) },
                 shape = ControlShape,
                 modifier = Modifier.weight(1f).then(dim),
             )
@@ -2184,7 +2401,18 @@ private fun BeatControls(
                             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(4.dp))
                         }
-                        Text("Auto")
+                        // Not chipLabel: this one shares its row with the spinner, so it takes the
+                        // width that's left rather than filling. Same shrink-to-fit rules, though.
+                        Text(
+                            stringResource(R.string.chip_auto),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            autoSize = TextAutoSize.StepBased(
+                                minFontSize = 11.sp,
+                                maxFontSize = 14.sp,
+                                stepSize = 0.5.sp,
+                            ),
+                        )
                     }
                 },
                 shape = ControlShape,
@@ -2193,14 +2421,14 @@ private fun BeatControls(
             FilterChip(
                 selected = false,
                 onClick = { if (locked) onLocked() else viewModel.tapTempo() },
-                label = { chipLabel("Tap") },
+                label = { chipLabel(stringResource(R.string.chip_tap)) },
                 shape = ControlShape,
                 modifier = Modifier.weight(1f).then(dim),
             )
             FilterChip(
                 selected = false,
                 onClick = onOptions,
-                label = { chipLabel("Options") },
+                label = { chipLabel(stringResource(R.string.chip_options)) },
                 shape = ControlShape,
                 modifier = Modifier.weight(1f),
             )
@@ -2214,12 +2442,14 @@ private fun BeatControls(
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 var octaveMenu by remember { mutableStateOf(false) }
                 Row(dim, verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { if (locked) onLocked() else viewModel.nudgeBpm(-1f) }) { Text("−") }
+                    TextButton(onClick = { if (locked) onLocked() else viewModel.nudgeBpm(-1f) }) {
+                        Text(stringResource(R.string.button_decrement))
+                    }
                     // Tap the BPM to halve or double it — the octave fix for when auto-detect lands
                     // a factor of two off, which the ±1 nudges can't reach.
                     Box {
                         Text(
-                            "${grid.bpm.roundToInt()} BPM",
+                            stringResource(R.string.bpm_value, grid.bpm.roundToInt()),
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier
                                 .clip(ControlShape)
@@ -2228,16 +2458,18 @@ private fun BeatControls(
                         )
                         DropdownMenu(expanded = octaveMenu, onDismissRequest = { octaveMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text("Double tempo") },
+                                text = { Text(stringResource(R.string.menu_double_tempo)) },
                                 onClick = { viewModel.doubleTempo(); octaveMenu = false },
                             )
                             DropdownMenuItem(
-                                text = { Text("Halve tempo") },
+                                text = { Text(stringResource(R.string.menu_halve_tempo)) },
                                 onClick = { viewModel.halveTempo(); octaveMenu = false },
                             )
                         }
                     }
-                    TextButton(onClick = { if (locked) onLocked() else viewModel.nudgeBpm(1f) }) { Text("+") }
+                    TextButton(onClick = { if (locked) onLocked() else viewModel.nudgeBpm(1f) }) {
+                        Text(stringResource(R.string.button_increment))
+                    }
                 }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -2270,10 +2502,18 @@ private fun OptionsSheet(
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         var tab by remember { mutableStateOf(0) }
-        val tabs = listOf("Count-in", "Audio", "Chords")
+        val tabs = listOf(
+            R.string.options_tab_countin,
+            R.string.options_tab_audio,
+            R.string.options_tab_chords,
+        )
         PrimaryTabRow(selectedTabIndex = tab) {
             tabs.forEachIndexed { i, title ->
-                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title) })
+                Tab(
+                    selected = tab == i,
+                    onClick = { tab = i },
+                    text = { Text(stringResource(title)) },
+                )
             }
         }
         Column(
@@ -2305,12 +2545,12 @@ private fun ChordEditBar(onDone: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "Editing chords — tap to relabel or split; drag a boundary to move",
+            stringResource(R.string.chord_edit_bar),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onDone) { Text("Done") }
+        TextButton(onClick = onDone) { Text(stringResource(R.string.action_done)) }
     }
 }
 
@@ -2318,6 +2558,7 @@ private fun ChordEditBar(onDone: () -> Unit) {
 @Composable
 private fun ChordPickerDialog(
     current: Chord?,
+    noteNaming: NoteNaming,
     canMerge: Boolean,
     onSet: (Chord) -> Unit,
     onClear: () -> Unit,
@@ -2325,17 +2566,17 @@ private fun ChordPickerDialog(
     onMerge: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val roots = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+    val roots = rootNames(noteNaming)
     var root by remember { mutableStateOf(current?.root ?: 0) }
     var quality by remember {
         mutableStateOf(current?.quality?.takeIf { it != Quality.NONE } ?: Quality.MAJ)
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Chord") },
+        title = { Text(stringResource(R.string.chord_picker_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Root", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.chord_root), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     roots.forEachIndexed { i, name ->
                         FilterChip(
@@ -2346,31 +2587,42 @@ private fun ChordPickerDialog(
                         )
                     }
                 }
-                Text("Quality", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    stringResource(R.string.chord_quality),
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(
-                        Quality.MAJ to "Maj",
-                        Quality.MIN to "Min",
-                        Quality.MAJ7 to "Maj7",
-                        Quality.MIN7 to "m7",
+                        Quality.MAJ to R.string.quality_maj,
+                        Quality.MIN to R.string.quality_min,
+                        Quality.MAJ7 to R.string.quality_maj7,
+                        Quality.MIN7 to R.string.quality_min7,
                     ).forEach { (q, lbl) ->
                         FilterChip(
                             selected = quality == q,
                             onClick = { quality = q },
-                            label = { Text(lbl) },
+                            label = { Text(stringResource(lbl)) },
                             shape = ControlShape,
                         )
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onClear) { Text("Clear") }
-                    TextButton(onClick = onSplit) { Text("Split") }
-                    if (canMerge) TextButton(onClick = onMerge) { Text("Merge") }
+                    TextButton(onClick = onClear) { Text(stringResource(R.string.action_clear)) }
+                    TextButton(onClick = onSplit) { Text(stringResource(R.string.action_split)) }
+                    if (canMerge) {
+                        TextButton(onClick = onMerge) { Text(stringResource(R.string.action_merge)) }
+                    }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSet(Chord(root, quality)) }) { Text("Set") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = {
+            TextButton(onClick = { onSet(Chord(root, quality)) }) {
+                Text(stringResource(R.string.action_set))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
     )
 }
 
@@ -2386,9 +2638,12 @@ private fun ChordsTab(
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
-            Text("Show chord lane", style = MaterialTheme.typography.titleSmall)
             Text(
-                "Detect and display chords over the waveform. Turn off to hide them entirely.",
+                stringResource(R.string.chords_show_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(R.string.chords_show_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2397,9 +2652,12 @@ private fun ChordsTab(
     }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
-            Text("Edit chords", style = MaterialTheme.typography.titleSmall)
             Text(
-                "Tap a chord in the lane to relabel or split it; long-press a boundary to drag it (snaps to the beat).",
+                stringResource(R.string.chords_edit_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(R.string.chords_edit_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2407,12 +2665,12 @@ private fun ChordsTab(
         Switch(checked = editMode, onCheckedChange = onSetEditMode, enabled = showChords)
     }
     Text(
-        "Your edits are saved with the track and restored when you reopen it.",
+        stringResource(R.string.chords_persist_note),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     TextButton(onClick = onReDetect, enabled = showChords && hasChords) {
-        Text("Re-detect chords (discard edits)")
+        Text(stringResource(R.string.chords_redetect))
     }
 }
 
@@ -2424,12 +2682,11 @@ private fun CountInTab(
     onSet: (beatsPerBar: Int, bars: Int) -> Unit,
 ) {
     Text(
-        "Long-press Play to start with a count-in: clicks at the track tempo " +
-            "(${bpm.roundToInt()} BPM) before playback begins.",
+        stringResource(R.string.countin_intro, bpm.roundToInt()),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Text("Beats per bar", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.countin_beats_per_bar), style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(2, 3, 4, 6).forEach { n ->
             FilterChip(
@@ -2440,7 +2697,7 @@ private fun CountInTab(
             )
         }
     }
-    Text("Bars", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.countin_bars), style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(1, 2).forEach { n ->
             FilterChip(
@@ -2465,57 +2722,61 @@ private fun AudioTab(
 ) {
     // One line per mode, each led by its own name, so the two are easy to tell apart at a glance.
     Text(
-        "Boost a track that was mixed too quietly.",
+        stringResource(R.string.audio_intro),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     ModeDescription(
-        "Peak",
-        " raises it until its loudest moment is as loud as it can get, without altering the sound.",
+        stringResource(R.string.audio_peak_name),
+        stringResource(R.string.audio_peak_desc),
     )
     ModeDescription(
-        "Loudness",
-        " goes by average level instead — it can lift a track Peak has nothing left to give, at " +
-            "the cost of easing the sharpest peaks back a little.",
+        stringResource(R.string.audio_loudness_name),
+        stringResource(R.string.audio_loudness_desc),
     )
-    Text("Normalize", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.audio_normalize_label), style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(
-            NormalizeMode.OFF to "Off",
-            NormalizeMode.PEAK to "Peak",
-            NormalizeMode.LOUDNESS to "Loudness",
+            NormalizeMode.OFF to R.string.normalize_off,
+            NormalizeMode.PEAK to R.string.audio_peak_name,
+            NormalizeMode.LOUDNESS to R.string.audio_loudness_name,
         ).forEach { (m, label) ->
             FilterChip(
                 selected = mode == m,
                 onClick = { onSet(m) },
-                label = { Text(label) },
+                label = { Text(stringResource(label)) },
                 shape = ControlShape,
             )
         }
     }
     // Say what the chosen mode actually does to *this* track. Without this, a Peak normalize that
     // finds no headroom looks like a broken button rather than an honest "nothing to gain here".
-    val boost = "%+.1f dB".format(gainDb)
+    val boost = stringResource(R.string.audio_boost_value, gainDb)
     Text(
         when {
-            mode == NormalizeMode.OFF -> "Playing at the track's own level."
+            mode == NormalizeMode.OFF -> stringResource(R.string.audio_status_off)
             gainDb < 0.5f && mode == NormalizeMode.PEAK ->
-                "This track already peaks at full volume, so Peak has no headroom to use. " +
-                    "Try Loudness."
-            gainDb < 0.5f -> "This track is already at the target level."
-            else -> "Boosting this track by $boost."
+                stringResource(R.string.audio_status_peak_no_headroom)
+
+            gainDb < 0.5f -> stringResource(R.string.audio_status_at_target)
+            else -> stringResource(R.string.audio_status_boosting, boost)
         },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
-/** One normalize mode explained: its name in bold, then what it does. */
+/**
+ * One normalize mode explained: its name in bold, then what it does. The separating space is added
+ * here rather than carried by the description — aapt trims leading whitespace off a resource, so a
+ * translated string can't hold one.
+ */
 @Composable
 private fun ModeDescription(mode: String, description: String) {
     Text(
         buildAnnotatedString {
             withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(mode) }
+            append(" ")
             append(description)
         },
         style = MaterialTheme.typography.bodyMedium,

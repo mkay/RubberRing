@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Bare activity theme; all real UI styling lives in the Compose theme. -->
-    <style name="Theme.RubberRing" parent="android:Theme.Material.NoActionBar" />
+    <!--
+      Bare activity theme; all real UI styling lives in the Compose theme.
+
+      Parented to AppCompat rather than the framework's Theme.Material because the activity is an
+      AppCompatActivity — see the appcompat dependency for why. Nothing here is drawn: Compose
+      paints over the whole window.
+    -->
+    <style name="Theme.RubberRing" parent="Theme.AppCompat.DayNight.NoActionBar" />
 </resources>

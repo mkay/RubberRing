@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.singular.looper.audio.ChordSpan
+import de.singular.looper.audio.NoteNaming
 import de.singular.looper.audio.WaveformData
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
@@ -154,6 +155,7 @@ fun LoopWaveform(
     gridIntervalFrac: Float, // 0 = no grid
     gridLinesPerBeat: Int, // subdivision; every Nth line is a beat (drawn brighter)
     chords: List<ChordSpan>, // detected chord timeline; empty until analysis lands
+    noteNaming: NoteNaming, // how the chord lane spells its roots (B vs the German H)
     initialZoom: Float,
     initialOffset: Float,
     gain: Float, // playback gain from normalization (1f = none); drawn so the boost is visible
@@ -479,7 +481,7 @@ fun LoopWaveform(
             val visSpan = 1f / zoom
             for (span in chords) {
                 if (span.endFrac < offset || span.startFrac > offset + visSpan) continue // off-screen
-                val name = span.chord.name
+                val name = span.chord.name(noteNaming)
                 if (name.isEmpty()) continue
                 // Pin the name to the visible left of its span (so a scrolled-in chord keeps its
                 // label), and draw it only when it fits the span's visible width.

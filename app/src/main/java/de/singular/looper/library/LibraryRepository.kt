@@ -5,6 +5,7 @@ package de.singular.looper.library
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import de.singular.looper.R
 import de.singular.looper.audio.Chord
 import de.singular.looper.audio.ChordSpan
 import de.singular.looper.audio.NormalizeMode
@@ -34,6 +35,12 @@ import java.util.zip.ZipOutputStream
  * serialised with a [Mutex]; the file copy in [copyIn] is independent and runs unlocked.
  */
 class LibraryRepository(context: Context) {
+
+    /**
+     * The picked file could not be read at all. Typed rather than carrying its own message, so the
+     * UI names the failure in the user's language instead of showing a string from down here.
+     */
+    class UnreadableFileException : IOException()
 
     private companion object {
         // Backup zip layout + version. Bump BACKUP_FORMAT only on a breaking change; the reader
@@ -69,11 +76,12 @@ class LibraryRepository(context: Context) {
         val dest = File(dir, storedFileName)
         resolver.openInputStream(uri)?.use { input ->
             dest.outputStream().use { output -> input.copyTo(output) }
-        } ?: throw IllegalStateException("Could not read the selected file")
+        } ?: throw UnreadableFileException()
         val track = LibraryTrack(
             id = id,
             storedFileName = storedFileName,
-            displayName = displayName?.takeIf { it.isNotBlank() } ?: "Untitled",
+            displayName = displayName?.takeIf { it.isNotBlank() }
+                ?: appContext.getString(R.string.untitled_track),
             importedAt = System.currentTimeMillis(),
             durationMs = 0L,
         )

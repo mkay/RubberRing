@@ -1,4 +1,308 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Translators: see the notes on individual strings below. Anything marked
+  translatable="false" is a brand name, a legal notice, a musical symbol, or a
+  number format — please leave those alone.
+-->
 <resources>
-    <string name="app_name">Rubber Ring</string>
+
+    <!-- ===== Brand ===== -->
+
+    <!-- The app's name. Not licensed for use by forks, and never translated. -->
+    <string name="app_name" translatable="false">Rubber Ring</string>
+    <!-- Sits under the wordmark on the home screen. Lowercase on purpose. -->
+    <string name="app_tagline">a play-along looper</string>
+
+    <!-- ===== Common actions ===== -->
+
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_save">Save</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_close">Close</string>
+    <string name="action_got_it">Got it</string>
+    <string name="action_done">Done</string>
+    <string name="action_back">Back</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_split">Split</string>
+    <string name="action_merge">Merge</string>
+    <string name="action_set">Set</string>
+
+    <!-- Stepper buttons. Typographic minus (U+2212), not a hyphen. -->
+    <string name="button_decrement" translatable="false">−</string>
+    <string name="button_increment" translatable="false">+</string>
+
+    <!-- ===== App bar ===== -->
+
+    <string name="cd_open_menu">Open menu</string>
+    <string name="cd_cancel_selection">Cancel selection</string>
+    <string name="cd_delete_selected">Delete selected</string>
+    <string name="cd_screen_kept_on">Screen kept on</string>
+    <plurals name="selection_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+
+    <!-- ===== Loading and errors ===== -->
+
+    <string name="state_decoding">Decoding…</string>
+    <!-- %1$s is the reason the file could not be loaded. -->
+    <string name="error_format">Error: %1$s</string>
+    <string name="error_unreadable_file">Could not read the selected file</string>
+    <string name="error_cannot_open_file">Could not open the file</string>
+    <string name="error_decode_failed">Could not decode this audio file</string>
+    <string name="error_unknown">Unknown error</string>
+
+    <!-- ===== Backup and restore ===== -->
+
+    <string name="backup_exported">Library backed up</string>
+    <string name="backup_restored">Library restored</string>
+    <string name="backup_failed">Backup failed — check the file and try again</string>
+
+    <string name="restore_confirm_title">Restore backup?</string>
+    <string name="restore_confirm_body">This replaces your entire current library — all imported tracks and saved loops — with the contents of the backup. This can\'t be undone.</string>
+    <string name="restore_choose">Choose backup</string>
+
+    <!-- ===== Deleting tracks ===== -->
+
+    <string name="delete_track_title">Delete track?</string>
+    <plurals name="delete_tracks_title">
+        <item quantity="one">Delete %d track?</item>
+        <item quantity="other">Delete %d tracks?</item>
+    </plurals>
+    <!-- %1$s is the track's name. -->
+    <string name="delete_track_body">Remove \"%1$s\" and its saved loops from your library? The original file on your device is not affected.</string>
+    <plurals name="delete_tracks_body">
+        <item quantity="one">Remove this %d track and its saved loops from your library? The original file on your device is not affected.</item>
+        <item quantity="other">Remove these %d tracks and their saved loops from your library? The original files on your device are not affected.</item>
+    </plurals>
+
+    <!-- ===== Keep-screen-on notice ===== -->
+
+    <string name="keep_awake_title">Screen stays on</string>
+    <!-- The quoted phrase is the name of the setting in the System tab; keep it matching. -->
+    <string name="keep_awake_body">“Keep screen on” is enabled, so the display won\'t dim or lock while a track is open. Handy for practice, but it uses more battery.</string>
+
+    <!-- ===== Settings ===== -->
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_tab_playback">Playback</string>
+    <string name="settings_tab_system">System</string>
+    <string name="settings_tab_about">About</string>
+
+    <string name="setting_follow_playhead">Follow playhead</string>
+    <string name="setting_save_zoom">Save zoom level</string>
+    <string name="setting_edge_inset">Add padding to waveform</string>
+    <!-- H and B are note names, not initials — in German notation B natural is written H,
+         and B flat is written B. Leave the letters as they are. -->
+    <string name="setting_german_notes">German note names (H/B)</string>
+    <string name="setting_keep_screen_on">Keep screen on</string>
+
+    <string name="setting_language">Language</string>
+    <!-- The option that hands the choice back to the device's own language setting. -->
+    <string name="language_system">System default</string>
+
+    <string name="section_appearance">Appearance</string>
+    <!-- Settings that are neither appearance nor backup. Avoid "Options" in any language: the
+         play view already has an Options chip meaning the per-track sheet. -->
+    <string name="section_general">General</string>
+    <string name="section_backup">Backup &amp; Restore</string>
+
+    <string name="backup_row_title">Back up library</string>
+    <string name="backup_row_subtitle">Save all tracks and loops to a file</string>
+    <string name="restore_row_title">Restore library</string>
+    <string name="restore_row_subtitle">Replace everything from a backup file</string>
+
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+
+    <!-- ===== About ===== -->
+
+    <!-- %1$s is the version name and build number, e.g. 0.8 (9). -->
+    <string name="about_version">v%1$s</string>
+    <string name="about_version_clipboard" translatable="false">Rubber Ring %1$s</string>
+    <string name="toast_version_copied">Version copied</string>
+
+    <string name="about_section_about">About</string>
+    <string name="about_body_about">I built Rubber Ring primarily for myself — maybe you\'ll find it just as useful as I do.</string>
+    <string name="about_section_website">Website</string>
+    <string name="about_body_website">The app lives here:</string>
+    <string name="about_section_bugs">Bugs</string>
+    <string name="about_body_bugs">Found a hiccup? Let me know:</string>
+    <string name="about_section_support">Support</string>
+    <string name="about_body_support">If you can, support its development:</string>
+    <string name="about_section_license">License</string>
+
+    <!-- Legal notices. Left untranslated on purpose: these state the exact terms the app is
+         released under, and a paraphrase in another language could change their meaning. -->
+    <string name="about_copyright" translatable="false">Copyright © 2025–2026 Kreuder</string>
+    <string name="about_license_body" translatable="false">Rubber Ring is free software under the GPL-3.0-only. The wordmark and the icon are CC BY 4.0; the name is not licensed, so a fork needs its own. Built with AndroidX and Jetpack Compose, licensed under Apache 2.0.</string>
+
+    <!-- ===== Drawer ===== -->
+
+    <string name="drawer_library">Library</string>
+    <string name="drawer_import">Import new file</string>
+    <string name="drawer_support">Support Rubber Ring</string>
+    <string name="drawer_quick_help">Quick help</string>
+    <string name="section_recent">Recent</string>
+
+    <!-- ===== Support dialog ===== -->
+
+    <string name="support_title">Keep this app alive</string>
+    <string name="support_intro">This app doesn\'t track. Anything.\nThe downside is I have no idea if or how often it\'s used or downloaded.\nCould be zero, could be a secret cult following. I genuinely don\'t know.</string>
+    <string name="support_question">Am I wasting my time publishing it? You tell me.</string>
+    <string name="support_ways">There are three (maybe more) ways to keep me motivated:</string>
+
+    <string name="support_easy_title">The easy way</string>
+    <string name="support_easy_action">Give it a like</string>
+    <string name="support_easy_note">Opens a page on my website with a like button. Nothing is counted until you press it — just the press and an anonymised IP.</string>
+    <string name="support_nerdy_title">The nerdy way</string>
+    <string name="support_nerdy_action">Star it on GitHub</string>
+    <string name="support_nerdy_note">A star is a number I can actually see, and it helps others find it.</string>
+    <string name="support_generous_title">The generous way</string>
+    <string name="support_generous_action">Support it on Ko-fi</string>
+    <string name="support_generous_note">Entirely optional. The app is and stays free either way.</string>
+
+    <string name="toast_no_browser">No browser found</string>
+
+    <!-- ===== Quick help ===== -->
+
+    <string name="help_title">Quick help</string>
+    <string name="help_marker_title">Move a marker</string>
+    <string name="help_marker_body">Long-press a marker\'s grip tab (or its line) until it grabs, then drag it. The short hold prevents accidental nudges.</string>
+    <string name="help_playhead_title">Move the playhead</string>
+    <string name="help_playhead_body">Tap anywhere in open space to jump the playhead there, or drag near the playhead line to scrub it.</string>
+    <string name="help_countin_title">Start with a count-in</string>
+    <string name="help_countin_body">Long-press Play to hear a count-in before the audio comes in; a normal tap starts straight away. Set its meter and length under Options.</string>
+    <string name="help_zoom_title">Zoom &amp; scroll</string>
+    <string name="help_zoom_body">Pinch with two fingers to zoom the waveform in and out. When zoomed in, drag in open space to scroll, or use the minimap strip at the bottom.</string>
+    <string name="help_save_loop_title">Save a loop</string>
+    <string name="help_save_loop_body">Set the start and end markers, then tap Save to store the region under a name. Saved loops belong to the current track.</string>
+    <string name="help_recall_loop_title">Recall a loop</string>
+    <string name="help_recall_loop_body">Tap a saved loop to jump its markers back into place. Long-press it for rename and delete options.</string>
+
+    <!-- ===== Library home ===== -->
+
+    <string name="library_intro">Pick an audio file to mark and loop a section.</string>
+    <string name="library_formats">Supports MP3, AAC (M4A), FLAC, WAV, and OGG.</string>
+    <string name="library_heading">Library</string>
+    <!-- Stands in for the name of an imported file that arrived without one. -->
+    <string name="untitled_track">Untitled</string>
+    <string name="rename_track_title">Rename track</string>
+    <plurals name="track_loop_count">
+        <item quantity="one">%d Loop</item>
+        <item quantity="other">%d Loops</item>
+    </plurals>
+    <string name="cd_track_options">Track options</string>
+    <string name="cd_selected">Selected</string>
+    <string name="cd_not_selected">Not selected</string>
+
+    <!-- ===== Play view ===== -->
+
+    <string name="hint_long_press_marker">Long-press a marker to move it</string>
+    <string name="time_start">Start</string>
+    <string name="time_loop">Loop</string>
+    <string name="time_end">End</string>
+
+    <string name="play_counting_in">Counting in…</string>
+    <string name="play_stop">Stop</string>
+    <string name="play_arrangement">Play arrangement</string>
+    <string name="play_play">Play</string>
+
+    <!-- The leading character is a fullwidth plus (U+FF0B), sized to match the chip text. -->
+    <string name="chip_save">＋ Save</string>
+    <string name="cd_arrange">Arrange</string>
+    <string name="save_loop_title">Save loop</string>
+    <string name="rename_loop_title">Rename loop</string>
+    <!-- Default name for a newly saved loop; %1$d counts up from 1. -->
+    <string name="loop_default_name">Loop %1$d</string>
+    <!-- Arrange here is the button named by cd_arrange; keep the two matching. -->
+    <string name="toast_arrange_locked">Turn off Arrange to use this</string>
+
+    <!-- ===== Arrange sheet ===== -->
+
+    <string name="arrange_title">Arrange</string>
+    <string name="arrange_enabled">enabled</string>
+    <string name="arrange_empty">Add saved loops below to build a practice sequence.</string>
+    <string name="arrange_deleted_loop">(deleted)</string>
+    <string name="arrange_add_step">Add step</string>
+    <string name="arrange_repeat_whole">Repeat whole sequence</string>
+    <!-- How many times a step repeats, e.g. ×3 -->
+    <string name="arrange_repeat_count" translatable="false">×%1$d</string>
+    <string name="cd_move_up">Move up</string>
+    <string name="cd_move_down">Move down</string>
+    <string name="cd_remove_step">Remove step</string>
+
+    <!-- ===== Beat and tempo controls ===== -->
+
+    <string name="chip_snap">Snap</string>
+    <string name="chip_auto">Auto</string>
+    <string name="chip_tap">Tap</string>
+    <string name="chip_options">Options</string>
+    <!-- BPM = beats per minute. %1$d is the tempo. -->
+    <string name="bpm_value">%1$d BPM</string>
+    <string name="menu_double_tempo">Double tempo</string>
+    <string name="menu_halve_tempo">Halve tempo</string>
+    <!-- Playback speed. %1$s is a multiplier like 0.8; × is the multiplication sign. -->
+    <string name="speed_label">Speed %1$s×</string>
+    <!-- The same, inside the slider popup. The double space is deliberate spacing. -->
+    <string name="speed_popup_label">"Speed  %1$s×"</string>
+
+    <!-- ===== Options sheet ===== -->
+
+    <string name="options_tab_countin">Count-in</string>
+    <string name="options_tab_audio">Audio</string>
+    <string name="options_tab_chords">Chords</string>
+
+    <!-- ===== Chords ===== -->
+
+    <string name="chord_edit_bar">Editing chords — tap to relabel or split; drag a boundary to move</string>
+    <string name="chord_picker_title">Chord</string>
+    <string name="chord_root">Root</string>
+    <string name="chord_quality">Quality</string>
+
+    <!-- Chord symbols as written on a chart. Left untranslated so they match the labels drawn
+         on the chord lane and the notation used on tab sites. -->
+    <string name="quality_maj" translatable="false">Maj</string>
+    <string name="quality_min" translatable="false">Min</string>
+    <string name="quality_maj7" translatable="false">Maj7</string>
+    <string name="quality_min7" translatable="false">m7</string>
+
+    <string name="chords_show_title">Show chord lane</string>
+    <string name="chords_show_body">Detect and display chords over the waveform. Turn off to hide them entirely.</string>
+    <string name="chords_edit_title">Edit chords</string>
+    <string name="chords_edit_body">Tap a chord in the lane to relabel or split it; long-press a boundary to drag it (snaps to the beat).</string>
+    <string name="chords_persist_note">Your edits are saved with the track and restored when you reopen it.</string>
+    <string name="chords_redetect">Re-detect chords (discard edits)</string>
+
+    <!-- ===== Count-in tab ===== -->
+
+    <!-- %1$d is the track's tempo in beats per minute. -->
+    <string name="countin_intro">Long-press Play to start with a count-in: clicks at the track tempo (%1$d BPM) before playback begins.</string>
+    <string name="countin_beats_per_bar">Beats per bar</string>
+    <string name="countin_bars">Bars</string>
+
+    <!-- ===== Audio tab ===== -->
+
+    <string name="audio_intro">Boost a track that was mixed too quietly.</string>
+    <!-- Shown as a bolded name joined to its description by a space, so the description
+         continues the sentence: "Peak raises it until…" -->
+    <string name="audio_peak_name">Peak</string>
+    <string name="audio_peak_desc">raises it until its loudest moment is as loud as it can get, without altering the sound.</string>
+    <string name="audio_loudness_name">Loudness</string>
+    <string name="audio_loudness_desc">goes by average level instead — it can lift a track Peak has nothing left to give, at the cost of easing the sharpest peaks back a little.</string>
+
+    <string name="audio_normalize_label">Normalize</string>
+    <string name="normalize_off">Off</string>
+
+    <string name="audio_status_off">Playing at the track\'s own level.</string>
+    <string name="audio_status_peak_no_headroom">This track already peaks at full volume, so Peak has no headroom to use. Try Loudness.</string>
+    <string name="audio_status_at_target">This track is already at the target level.</string>
+    <!-- %1$s is a gain like +3.5 dB. -->
+    <string name="audio_status_boosting">Boosting this track by %1$s.</string>
+    <string name="audio_boost_value" translatable="false">%+.1f dB</string>
+
 </resources>

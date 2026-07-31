@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+
+    <!--
+      A locale that isn't finished yet is the normal state of a translated app, not a broken
+      build: Android falls back to the English string for anything missing, so a half-translated
+      locale renders correctly, just partly in English. Kept as a warning so the gap is still
+      visible in a lint report.
+    -->
+    <issue id="MissingTranslation" severity="warning" />
+
+    <!--
+      The reverse is a real mistake and stays an error: a translation for a string marked
+      translatable="false" means someone localised a brand name, a legal notice, a chord symbol,
+      or a number format that must not vary by locale.
+    -->
+    <issue id="ExtraTranslation" severity="error" />
+
+    <!--
+      Placeholders must survive translation. A dropped or renamed %1$s crashes at format time,
+      in the one locale nobody building the app is running.
+    -->
+    <issue id="StringFormatInvalid" severity="error" />
+    <issue id="StringFormatCount" severity="error" />
+
+</lint>
