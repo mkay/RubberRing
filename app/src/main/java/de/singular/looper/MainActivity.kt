@@ -2326,10 +2326,19 @@ private fun ArrangeSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    stringResource(R.string.arrange_title),
-                    style = MaterialTheme.typography.titleLarge,
-                )
+                // The same glyph as the button that opens this sheet, so the two read as one place.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        ImageVector.vectorResource(R.drawable.ic_queue_music),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(R.string.arrange_title),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         stringResource(R.string.arrange_enabled),
