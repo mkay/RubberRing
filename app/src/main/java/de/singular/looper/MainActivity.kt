@@ -126,8 +126,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -144,6 +146,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.graphics.Color
@@ -173,6 +177,8 @@ import androidx.compose.foundation.text.TextAutoSize
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.IntentCompat
@@ -1508,6 +1514,8 @@ private fun LibraryContent(
         LoopNameDialog(
             title = stringResource(R.string.rename_track_title),
             initial = target.name,
+            // Two imported files may legitimately share a name, so tracks aren't constrained.
+            taken = emptyList(),
             onConfirm = { onRename(target, it); renameTarget = null },
             onDismiss = { renameTarget = null },
         )
@@ -1983,6 +1991,44 @@ private fun LoopChips(
     val chipScroll = rememberScrollState()
     val fadeWidth = with(LocalDensity.current) { CHIP_FADE.toPx() }
 
+    // Loops are held in song order, so a newly saved one can land anywhere in the row — often off
+    // screen, which made saving look like it had done nothing. Each chip reports where it sits in
+    // the (unscrolled) content, and the row scrolls whichever chip matters into view.
+    val chipBounds = remember { mutableStateMapOf<String, IntRange>() }
+    var scrollTarget by remember { mutableStateOf<String?>(null) }
+    var knownIds by remember { mutableStateOf(emptySet<String>()) }
+
+    val selectedId = loops.firstOrNull {
+        abs(it.startFrac - region.startFrac) < 1e-3f && abs(it.endFrac - region.endFrac) < 1e-3f
+    }?.id
+
+    LaunchedEffect(loops) {
+        val ids = loops.map { it.id }.toSet()
+        chipBounds.keys.retainAll(ids)
+        // A loop the row hasn't seen before is the one that was just saved.
+        (ids - knownIds).firstOrNull()?.let { scrollTarget = it }
+        knownIds = ids
+    }
+    // Recalling a loop from elsewhere — the arrangement, or a chip only half in view — should also
+    // bring it into view. Tapping a fully visible chip resolves to a no-op below.
+    LaunchedEffect(selectedId) { selectedId?.let { scrollTarget = it } }
+
+    LaunchedEffect(scrollTarget) {
+        val id = scrollTarget ?: return@LaunchedEffect
+        // The chip may not have been placed yet when it is brand new, so wait for its bounds.
+        val bounds = snapshotFlow { chipBounds[id] }.filterNotNull().first()
+        val pad = fadeWidth.roundToInt()
+        val viewport = chipScroll.viewportSize
+        // Clear the fade as well as the edge, so the chip lands fully legible rather than half
+        // dissolved into it.
+        val target = when {
+            bounds.first - pad < chipScroll.value -> bounds.first - pad
+            bounds.last + pad > chipScroll.value + viewport -> bounds.last + pad - viewport
+            else -> return@LaunchedEffect
+        }
+        chipScroll.animateScrollTo(target.coerceIn(0, chipScroll.maxValue))
+    }
+
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2039,13 +2085,15 @@ private fun LoopChips(
                 )
             }
             loops.forEach { loop ->
-                // Highlight the loop whose span matches the current markers.
-                val selected = abs(loop.startFrac - region.startFrac) < 1e-3f &&
-                    abs(loop.endFrac - region.endFrac) < 1e-3f
                 LoopChip(
                     loop = loop,
-                    selected = selected,
+                    // Highlight the loop whose span matches the current markers.
+                    selected = loop.id == selectedId,
                     locked = locked,
+                    modifier = Modifier.onPlaced {
+                        val x = it.positionInParent().x.roundToInt()
+                        chipBounds[loop.id] = x..(x + it.size.width)
+                    },
                     onLocked = onLocked,
                     onApply = { onApply(loop) },
                     onRename = { renameTarget = loop },
@@ -2090,7 +2138,8 @@ private fun LoopChips(
     if (showSaveDialog) {
         LoopNameDialog(
             title = stringResource(R.string.save_loop_title),
-            initial = stringResource(R.string.loop_default_name, loops.size + 1),
+            initial = defaultLoopName(loops),
+            taken = loops.map { it.label },
             onConfirm = { onSave(it); showSaveDialog = false },
             onDismiss = { showSaveDialog = false },
         )
@@ -2099,6 +2148,8 @@ private fun LoopChips(
         LoopNameDialog(
             title = stringResource(R.string.rename_loop_title),
             initial = target.label,
+            // Keeping a loop's own name is not a clash, so it doesn't block the rename.
+            taken = loops.filterNot { it.id == target.id }.map { it.label },
             onConfirm = { onRename(target.id, it); renameTarget = null },
             onDismiss = { renameTarget = null },
         )
@@ -2292,6 +2343,7 @@ private fun LoopChip(
     onApply: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
     // Only the active loop is fully coloured; the rest stay quiet.
@@ -2299,7 +2351,7 @@ private fun LoopChip(
     else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
     else MaterialTheme.colorScheme.onSurfaceVariant
-    Box(Modifier.alpha(if (locked) LOCKED_ALPHA else 1f)) {
+    Box(modifier.alpha(if (locked) LOCKED_ALPHA else 1f)) {
         Surface(
             shape = ControlShape,
             color = bg,
@@ -2331,14 +2383,37 @@ private fun LoopChip(
     }
 }
 
+/**
+ * The next free "Loop N" name. Counting from the loop total keeps the usual case ("Loop 4" on a
+ * track holding three) while stepping over names already in use, so deleting and re-saving can't
+ * mint a second loop with the same name.
+ */
+@Composable
+private fun defaultLoopName(loops: List<SavedLoop>): String {
+    val taken = loops.map { it.label.trim().lowercase() }.toSet()
+    var n = loops.size + 1
+    var name = stringResource(R.string.loop_default_name, n)
+    while (name.lowercase() in taken) {
+        n++
+        name = stringResource(R.string.loop_default_name, n)
+    }
+    return name
+}
+
 @Composable
 private fun LoopNameDialog(
     title: String,
     initial: String,
+    taken: List<String>,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var text by remember { mutableStateOf(initial) }
+    // Two names that differ only in case or padding would be indistinguishable in the row, so
+    // they count as the same name.
+    val takenNames = remember(taken) { taken.map { it.trim().lowercase() }.toSet() }
+    val trimmed = text.trim()
+    val clash = trimmed.lowercase() in takenNames
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -2348,11 +2423,20 @@ private fun LoopNameDialog(
                 onValueChange = { text = it },
                 singleLine = true,
                 shape = ControlShape,
+                isError = clash,
+                supportingText = if (clash) {
+                    { Text(stringResource(R.string.loop_name_taken)) }
+                } else {
+                    null
+                },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(text) }) { Text(stringResource(R.string.action_save)) }
+            TextButton(
+                onClick = { onConfirm(text) },
+                enabled = trimmed.isNotEmpty() && !clash,
+            ) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }

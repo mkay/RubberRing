@@ -711,9 +711,14 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (track.savedLoops.size >= MAX_SAVED_LOOPS) return
         val r = _region.value
         val g = _grid.value
+        // The dialog normally supplies a vetted name; this is the fallback for a blank one, and it
+        // steps over names in use for the same reason the dialog does.
         val name = label.trim().ifBlank {
-            getApplication<Application>()
-                .getString(R.string.loop_default_name, track.savedLoops.size + 1)
+            val taken = track.savedLoops.map { it.label.trim().lowercase() }.toSet()
+            val app = getApplication<Application>()
+            var n = track.savedLoops.size + 1
+            while (app.getString(R.string.loop_default_name, n).lowercase() in taken) n++
+            app.getString(R.string.loop_default_name, n)
         }
         val loop = SavedLoop(
             id = UUID.randomUUID().toString(),

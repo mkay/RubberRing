@@ -219,6 +219,7 @@
     <string name="cd_arrange">Arrange</string>
     <string name="save_loop_title">Save loop</string>
     <string name="rename_loop_title">Rename loop</string>
+    <string name="loop_name_taken">This track already has a loop with that name</string>
     <!-- Default name for a newly saved loop; %1$d counts up from 1. -->
     <string name="loop_default_name">Loop %1$d</string>
     <!-- Arrange here is the button named by cd_arrange; keep the two matching. -->

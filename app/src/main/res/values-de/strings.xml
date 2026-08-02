@@ -167,6 +167,7 @@
     <string name="cd_arrange">Arrangieren</string>
     <string name="save_loop_title">Loop speichern</string>
     <string name="rename_loop_title">Loop umbenennen</string>
+    <string name="loop_name_taken">Dieser Track hat schon einen Loop mit diesem Namen</string>
     <string name="loop_default_name">Loop %1$d</string>
     <string name="toast_arrange_locked">Schalte Arrangieren aus, um das zu nutzen</string>
     <string name="toast_loop_limit">Maximal %1$d Loops pro Titel</string>
