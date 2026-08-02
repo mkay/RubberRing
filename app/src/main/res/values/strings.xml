@@ -182,7 +182,7 @@
     <string name="help_save_loop_title">Save a loop</string>
     <string name="help_save_loop_body">Set the start and end markers, then tap + to store the region under a name. Saved loops belong to the current track.</string>
     <string name="help_recall_loop_title">Recall a loop</string>
-    <string name="help_recall_loop_body">Tap a saved loop to jump its markers back into place. Long-press it for rename and delete options.</string>
+    <string name="help_recall_loop_body">Tap a saved loop to jump its markers back into place. Long-press it and drag to move it along the row; long-press and let go for rename and delete options.</string>
 
     <!-- ===== Library home ===== -->
 

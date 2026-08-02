@@ -757,24 +757,38 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLoop(id: String) {
         val track = currentTrack ?: return
         // Also drop any arrangement steps that pointed at this loop, so the sequence stays valid.
-        val sorted = track.savedLoops.filterNot { it.id == id }.sortedBy { it.startFrac }
+        val remaining = track.savedLoops.filterNot { it.id == id }
         val arr = track.arrangement.filterNot { it.loopId == id }
         val active = if (arr.isEmpty()) false else _arrangementActive.value
-        val updated = track.copy(savedLoops = sorted, arrangement = arr, arrangementActive = active)
+        val updated = track.copy(savedLoops = remaining, arrangement = arr, arrangementActive = active)
         currentTrack = updated
-        _savedLoops.value = sorted
+        _savedLoops.value = remaining
         _arrangement.value = arr
         _arrangementActive.value = active
         persistTrack(updated)
     }
 
-    /** Replace the open track's loop list (sorted in song order) and persist. */
+    /**
+     * Put the loops in the given order, named by id. Ignores an order that doesn't account for
+     * exactly the loops on the track, so a stale drag can't drop or duplicate one.
+     */
+    fun reorderLoops(idsInOrder: List<String>) {
+        val track = currentTrack ?: return
+        val byId = track.savedLoops.associateBy { it.id }
+        val reordered = idsInOrder.mapNotNull { byId[it] }
+        if (reordered.size != track.savedLoops.size) return
+        updateLoops(reordered)
+    }
+
+    /**
+     * Replace the open track's loop list and persist. The order is the user's — chips can be
+     * dragged into any arrangement, and new loops append — so it is stored as given, not sorted.
+     */
     private fun updateLoops(loops: List<SavedLoop>) {
         val track = currentTrack ?: return
-        val sorted = loops.sortedBy { it.startFrac }
-        val updated = track.copy(savedLoops = sorted)
+        val updated = track.copy(savedLoops = loops)
         currentTrack = updated
-        _savedLoops.value = sorted
+        _savedLoops.value = loops
         persistTrack(updated)
     }
 

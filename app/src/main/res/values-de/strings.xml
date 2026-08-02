@@ -137,7 +137,7 @@
     <string name="help_save_loop_title">Loop speichern</string>
     <string name="help_save_loop_body">Setze Start- und Endmarker und tippe dann auf +, um den Bereich unter einem Namen abzulegen. Gespeicherte Loops gehören zum aktuellen Track.</string>
     <string name="help_recall_loop_title">Loop aufrufen</string>
-    <string name="help_recall_loop_body">Tippe auf einen gespeicherten Loop, um seine Marker zurückzuholen. Halte ihn gedrückt für Umbenennen und Löschen.</string>
+    <string name="help_recall_loop_body">Tippe auf einen gespeicherten Loop, um seine Marker zurückzuholen. Halte ihn gedrückt und ziehe ihn, um ihn in der Reihe zu verschieben; halte ihn gedrückt und lass los für Umbenennen und Löschen.</string>
 
     <string name="library_intro">Wähle eine Audiodatei und markiere einen Abschnitt.</string>
     <string name="library_formats">Unterstützt MP3, AAC (M4A), FLAC, WAV und OGG.</string>

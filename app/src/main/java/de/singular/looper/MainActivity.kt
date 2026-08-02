@@ -37,6 +37,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.verticalScroll
@@ -126,11 +128,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -146,6 +152,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -173,6 +180,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.text.TextAutoSize
 import java.util.Locale
 import kotlin.math.abs
@@ -239,6 +247,25 @@ private const val LOCKED_ALPHA = 0.4f
 
 /** How far the loop-chip row fades out at an edge it can still be scrolled towards. */
 private val CHIP_FADE = 20.dp
+
+/** Gap between loop chips. Reordering needs it to know how far a chip must travel to pass one. */
+private val CHIP_SPACING = 8.dp
+
+/**
+ * Movement after a long-press that counts as dragging a chip rather than opening its menu. Also
+ * the dead zone the chip holds still through, so it is generous: a finger settling on a chip
+ * travels further than a mouse would.
+ */
+private val DRAG_SLOP = 12.dp
+
+/**
+ * How close to the row's edge a dragging finger starts pulling the row along, and how fast it
+ * scrolls at most (pixels per frame, reached at the very edge and ramped down across the zone).
+ * Keyed to the finger rather than to the dragged chip: a chip that scrolls into view would stop
+ * its own scrolling, which is what turns reaching a far position into a wiggling match.
+ */
+private val AUTOSCROLL_ZONE = 56.dp
+private const val AUTOSCROLL_MAX = 26f
 
 class MainActivity : AppCompatActivity() {
     /**
@@ -1912,6 +1939,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             onSave = viewModel::saveCurrentLoop,
             onRename = viewModel::renameLoop,
             onDelete = viewModel::deleteLoop,
+            onReorder = viewModel::reorderLoops,
         )
 
         Spacer(Modifier.height(8.dp))
@@ -1984,6 +2012,7 @@ private fun LoopChips(
     onSave: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onReorder: (List<String>) -> Unit,
 ) {
     var showSaveDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<SavedLoop?>(null) }
@@ -1991,9 +2020,10 @@ private fun LoopChips(
     val chipScroll = rememberScrollState()
     val fadeWidth = with(LocalDensity.current) { CHIP_FADE.toPx() }
 
-    // Loops are held in song order, so a newly saved one can land anywhere in the row — often off
-    // screen, which made saving look like it had done nothing. Each chip reports where it sits in
-    // the (unscrolled) content, and the row scrolls whichever chip matters into view.
+    // A newly saved loop appends to the row, which is often off screen once a track holds several,
+    // so saving looked like it had done nothing. Each chip reports where it sits in the (unscrolled)
+    // content, and the row scrolls whichever chip matters into view. The same bounds drive the drag
+    // below, which needs to know how wide the neighbour it is passing is.
     val chipBounds = remember { mutableStateMapOf<String, IntRange>() }
     var scrollTarget by remember { mutableStateOf<String?>(null) }
     var knownIds by remember { mutableStateOf(emptySet<String>()) }
@@ -2012,6 +2042,74 @@ private fun LoopChips(
     // Recalling a loop from elsewhere — the arrangement, or a chip only half in view — should also
     // bring it into view. Tapping a fully visible chip resolves to a no-op below.
     LaunchedEffect(selectedId) { selectedId?.let { scrollTarget = it } }
+
+    // ---- Drag to reorder ----
+    // Long-press lifts a chip; moving it swaps past its neighbours as it goes, and releasing keeps
+    // that order. Releasing without having moved is still the rename/delete menu, so the drag costs
+    // no gesture and no extra affordance on the chip.
+    val haptics = LocalHapticFeedback.current
+    val spacingPx = with(LocalDensity.current) { CHIP_SPACING.toPx() }
+    val autoScrollZone = with(LocalDensity.current) { AUTOSCROLL_ZONE.toPx() }
+    var dragId by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var dragOrder by remember { mutableStateOf<List<String>>(emptyList()) }
+    // Where the finger is across the visible row, which is what drives the auto-scroll. Scrolling
+    // the content does not change it, so a finger held still keeps pulling at the same speed.
+    var dragPointerX by remember { mutableFloatStateOf(0f) }
+    // Armed by the first real movement: lifting a chip that already sits in the edge zone must not
+    // start the row travelling on its own.
+    var dragMoving by remember { mutableStateOf(false) }
+
+    // While a chip is lifted the row renders from the live drag order; the committed list otherwise.
+    val shown = if (dragId == null) loops else dragOrder.mapNotNull { id -> loops.find { it.id == id } }
+
+    fun widthOf(id: String): Float =
+        chipBounds[id]?.let { (it.last - it.first).toFloat() } ?: 0f
+
+    // Step the dragged chip past every neighbour whose midpoint it has crossed, taking that
+    // neighbour's width back out of the offset so the chip stays under the finger.
+    fun settleDrag(id: String) {
+        while (true) {
+            val i = dragOrder.indexOf(id)
+            if (dragOffset > 0 && i in 0 until dragOrder.lastIndex) {
+                val step = widthOf(dragOrder[i + 1]) + spacingPx
+                if (dragOffset <= step / 2f) return
+                dragOrder = dragOrder.toMutableList().apply { add(i + 1, removeAt(i)) }
+                dragOffset -= step
+            } else if (dragOffset < 0 && i > 0) {
+                val step = widthOf(dragOrder[i - 1]) + spacingPx
+                if (-dragOffset <= step / 2f) return
+                dragOrder = dragOrder.toMutableList().apply { add(i - 1, removeAt(i)) }
+                dragOffset += step
+            } else {
+                return
+            }
+        }
+    }
+
+    // Holding the dragged chip near either end of the row pulls the row along, so a chip can be
+    // taken somewhere off screen without letting go. Speed ramps up across the zone, so easing
+    // towards the edge creeps and pressing right up to it travels fast. Whatever the row scrolls is
+    // added back to the offset, keeping the chip under the finger, and swaps settle as it passes.
+    LaunchedEffect(dragId) {
+        if (dragId == null) return@LaunchedEffect
+        while (true) {
+            withFrameNanos { }
+            val id = dragId ?: return@LaunchedEffect
+            if (!dragMoving) continue
+            val viewport = chipScroll.viewportSize.toFloat()
+            val depth = when {
+                dragPointerX > viewport - autoScrollZone -> dragPointerX - (viewport - autoScrollZone)
+                dragPointerX < autoScrollZone -> dragPointerX - autoScrollZone
+                else -> 0f
+            }
+            if (depth != 0f) {
+                val ramp = (depth / autoScrollZone).coerceIn(-1f, 1f)
+                dragOffset += chipScroll.scrollBy(ramp * AUTOSCROLL_MAX)
+                settleDrag(id)
+            }
+        }
+    }
 
     LaunchedEffect(scrollTarget) {
         val id = scrollTarget ?: return@LaunchedEffect
@@ -2070,8 +2168,11 @@ private fun LoopChips(
                         )
                     }
                 }
-                .horizontalScroll(chipScroll),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // Dragging a chip drives the row itself (see the auto-scroll above), so hand-
+                // scrolling is off for the duration — the two would otherwise fight over the same
+                // finger. Programmatic scrolling is unaffected by this flag.
+                .horizontalScroll(chipScroll, enabled = dragId == null),
+            horizontalArrangement = Arrangement.spacedBy(CHIP_SPACING),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // With Save pinned to the right, an empty row would leave it floating over blank space
@@ -2084,14 +2185,45 @@ private fun LoopChips(
                     maxLines = 1,
                 )
             }
-            loops.forEach { loop ->
+            shown.forEach { loop ->
+                // Keyed by loop, not by position: reordering during a drag must move the existing
+                // chip, not hand a neighbour's slot a new loop. Without this the drag's pointer
+                // handler restarts on the first swap and the rest of the gesture scrolls the row.
+                key(loop.id) {
                 LoopChip(
                     loop = loop,
                     // Highlight the loop whose span matches the current markers.
                     selected = loop.id == selectedId,
                     locked = locked,
+                    dragging = loop.id == dragId,
+                    dragOffset = if (loop.id == dragId) dragOffset else 0f,
+                    onDragStart = {
+                        dragOrder = loops.map { it.id }
+                        dragId = loop.id
+                        dragOffset = 0f
+                        dragMoving = false
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    },
+                    onDrag = { dx, pointerX ->
+                        dragOffset += dx
+                        dragMoving = true
+                        // The chip's resting position plus how far it is held from it, plus where
+                        // the finger sits on the chip, less the scroll: the finger across the row.
+                        val restingX = chipBounds[loop.id]?.first?.toFloat() ?: 0f
+                        dragPointerX = restingX + dragOffset + pointerX - chipScroll.value
+                        settleDrag(loop.id)
+                    },
+                    onDragStop = { moved ->
+                        if (moved) onReorder(dragOrder)
+                        dragId = null
+                        dragOffset = 0f
+                        dragMoving = false
+                    },
                     modifier = Modifier.onPlaced {
-                        val x = it.positionInParent().x.roundToInt()
+                        // Bounds are read while dragging, so record where the chip actually
+                        // belongs in the row rather than where it is being held.
+                        val x = it.positionInParent().x.roundToInt() -
+                            (if (loop.id == dragId) dragOffset.roundToInt() else 0)
                         chipBounds[loop.id] = x..(x + it.size.width)
                     },
                     onLocked = onLocked,
@@ -2099,6 +2231,7 @@ private fun LoopChips(
                     onRename = { renameTarget = loop },
                     onDelete = { onDelete(loop.id) },
                 )
+                }
             }
         }
         // …while Save and Arrange stay pinned as icon-only buttons, so neither can scroll out of
@@ -2343,6 +2476,11 @@ private fun LoopChip(
     onApply: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    dragging: Boolean = false,
+    dragOffset: Float = 0f,
+    onDragStart: () -> Unit = {},
+    onDrag: (dx: Float, pointerX: Float) -> Unit = { _, _ -> },
+    onDragStop: (moved: Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -2351,17 +2489,61 @@ private fun LoopChip(
     else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
     else MaterialTheme.colorScheme.onSurfaceVariant
-    Box(modifier.alpha(if (locked) LOCKED_ALPHA else 1f)) {
+    // A long-press that never moves is the menu, as it always was; one that moves is a drag. The
+    // threshold keeps the tremor of a held finger from being read as an attempt to reorder.
+    val slop = with(LocalDensity.current) { DRAG_SLOP.toPx() }
+    var travelled by remember { mutableFloatStateOf(0f) }
+    // pointerInput captures its lambdas once and keeps them for as long as its keys hold, so the
+    // callbacks are read through rememberUpdatedState. Captured directly, a drag would start from
+    // the loop order as it stood when the block began — i.e. before any earlier reorder.
+    val startDrag by rememberUpdatedState(onDragStart)
+    val drag by rememberUpdatedState(onDrag)
+    val stopDrag by rememberUpdatedState(onDragStop)
+    val notifyLocked by rememberUpdatedState(onLocked)
+    Box(
+        modifier
+            .alpha(if (locked) LOCKED_ALPHA else 1f)
+            // Lifted above its neighbours so it slides over them rather than under.
+            .zIndex(if (dragging) 1f else 0f)
+            .graphicsLayer { translationX = dragOffset },
+    ) {
         Surface(
             shape = ControlShape,
             color = bg,
             contentColor = fg,
+            // Raised while held, the one bit of feedback that says the chip is now movable.
+            shadowElevation = if (dragging) 6.dp else 0.dp,
             // While the arrangement is armed, both tap and long-press just explain why rather than
             // applying/editing a loop that no longer affects what the Play button plays.
-            modifier = Modifier.combinedClickable(
-                onClick = { if (locked) onLocked() else onApply() },
-                onLongClick = { if (locked) onLocked() else menu = true },
-            ),
+            modifier = Modifier
+                .combinedClickable(onClick = { if (locked) onLocked() else onApply() })
+                .pointerInput(loop.id, locked) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            travelled = 0f
+                            if (!locked) startDrag()
+                        },
+                        onDrag = { change, delta ->
+                            change.consume()
+                            if (!locked) {
+                                travelled += abs(delta.x)
+                                // The chip does not budge until the finger has clearly set off, so
+                                // holding still — or shifting a little while reaching for the menu
+                                // — leaves the row exactly as it was.
+                                if (travelled > slop) drag(delta.x, change.position.x)
+                            }
+                        },
+                        onDragEnd = {
+                            when {
+                                locked -> notifyLocked()
+                                travelled > slop -> stopDrag(true)
+                                // Held and let go without moving: the menu, as before.
+                                else -> { stopDrag(false); menu = true }
+                            }
+                        },
+                        onDragCancel = { if (!locked) stopDrag(travelled > slop) },
+                    )
+                },
         ) {
             Text(
                 loop.label,
