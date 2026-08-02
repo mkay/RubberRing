@@ -60,8 +60,8 @@ import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Delete
@@ -135,7 +135,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.vectorResource
@@ -144,6 +151,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
@@ -222,6 +230,9 @@ private const val EDGE_INSET_FRACTION = 0.5f
 
 /** Dim factor for controls locked out while an arrangement is enabled. */
 private const val LOCKED_ALPHA = 0.4f
+
+/** How far the loop-chip row fades out at an edge it can still be scrolled towards. */
+private val CHIP_FADE = 20.dp
 
 class MainActivity : AppCompatActivity() {
     /**
@@ -1683,6 +1694,13 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val notifyLocked: () -> Unit = {
         Toast.makeText(context, R.string.toast_arrange_locked, Toast.LENGTH_SHORT).show()
     }
+    // Save stays put once the track is full — a control that vanishes reads as a broken app, so it
+    // dims instead and a tap says what the limit is and how to get under it.
+    // Resolved here rather than inside the lambda so it follows the in-app language picker.
+    val loopLimitMessage = stringResource(R.string.toast_loop_limit, MAX_SAVED_LOOPS)
+    val notifyLoopLimit: () -> Unit = {
+        Toast.makeText(context, loopLimitMessage, Toast.LENGTH_SHORT).show()
+    }
 
     val intervalFrac = if (grid.bpm > 0f && durationMs > 0)
         ((60_000.0 / grid.bpm / grid.subdivision) / durationMs).toFloat() else 0f
@@ -1875,7 +1893,8 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         LoopChips(
             loops = loops,
             region = region,
-            canAdd = loops.size < MAX_SAVED_LOOPS,
+            atLimit = loops.size >= MAX_SAVED_LOOPS,
+            onLimit = notifyLoopLimit,
             canArrange = loops.isNotEmpty(),
             arrangeActive = arrangementActive,
             locked = arrangementActive,
@@ -1946,7 +1965,8 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 private fun LoopChips(
     loops: List<SavedLoop>,
     region: LoopRegion,
-    canAdd: Boolean,
+    atLimit: Boolean,
+    onLimit: () -> Unit,
     canArrange: Boolean,
     arrangeActive: Boolean,
     locked: Boolean,
@@ -1960,6 +1980,9 @@ private fun LoopChips(
     var showSaveDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<SavedLoop?>(null) }
 
+    val chipScroll = rememberScrollState()
+    val fadeWidth = with(LocalDensity.current) { CHIP_FADE.toPx() }
+
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1967,10 +1990,54 @@ private fun LoopChips(
     ) {
         // Chips take the remaining width and scroll sideways within it…
         Row(
-            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            Modifier
+                .weight(1f)
+                // A chip cut flush at the edge reads as a rendering fault rather than as "there is
+                // more this way", so the row fades out over its last few dp — the same trick as a
+                // CSS mask-image gradient: paint the content, then multiply its alpha by a gradient
+                // (DstIn), which needs the layer composited offscreen to have an alpha channel to
+                // erase. Each edge only fades while there is actually something hidden past it.
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    drawContent()
+                    if (chipScroll.canScrollBackward) {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color.Transparent, Color.Black),
+                                startX = 0f,
+                                endX = fadeWidth,
+                            ),
+                            size = Size(fadeWidth, size.height),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    }
+                    if (chipScroll.canScrollForward) {
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color.Black, Color.Transparent),
+                                startX = size.width - fadeWidth,
+                                endX = size.width,
+                            ),
+                            topLeft = Offset(size.width - fadeWidth, 0f),
+                            size = Size(fadeWidth, size.height),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    }
+                }
+                .horizontalScroll(chipScroll),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // With Save pinned to the right, an empty row would leave it floating over blank space
+            // with nothing to explain it. Name what the button is for until the first loop exists.
+            if (loops.isEmpty()) {
+                Text(
+                    stringResource(R.string.loops_empty_hint),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
             loops.forEach { loop ->
                 // Highlight the loop whose span matches the current markers.
                 val selected = abs(loop.startFrac - region.startFrac) < 1e-3f &&
@@ -1985,36 +2052,37 @@ private fun LoopChips(
                     onDelete = { onDelete(loop.id) },
                 )
             }
-            if (canAdd) {
-                AssistChip(
-                    onClick = { if (locked) onLocked() else showSaveDialog = true },
-                    label = { Text(stringResource(R.string.chip_save)) },
-                    shape = ControlShape,
-                    modifier = Modifier.alpha(if (locked) LOCKED_ALPHA else 1f),
-                )
-            }
         }
-        // …the Arrange action stays pinned as an icon-only button so it can't scroll out of reach
-        // and takes minimal width. While the arrangement is armed it fills brand-red with a white
-        // icon (like an active loop chip); otherwise it's a plain icon on no background.
-        if (canArrange) {
-            Surface(
-                onClick = onArrange,
-                shape = ControlShape,
-                color = if (arrangeActive) MaterialTheme.colorScheme.primary else Color.Transparent,
-                contentColor = if (arrangeActive) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurface,
-            ) {
-                // Match the chip height (32dp) so it lines up with the loop/save chips beside it.
-                Box(
-                    Modifier.height(32.dp).padding(horizontal = 6.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Filled.FormatListNumbered,
-                        contentDescription = stringResource(R.string.cd_arrange),
-                    )
-                }
+        // …while Save and Arrange stay pinned as icon-only buttons, so neither can scroll out of
+        // reach once a track carries a full row of loops. They read as one pair of actions, so they
+        // sit tight against each other — the 8dp of the outer row would drift them apart.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PinnedLoopAction(
+                icon = Icons.Filled.Add,
+                contentDescription = stringResource(R.string.cd_save_loop),
+                // Dimmed for two different reasons, each with its own explanation on tap: the
+                // arrangement is armed, or the track already holds MAX_SAVED_LOOPS loops.
+                dimmed = locked || atLimit,
+                onClick = {
+                    when {
+                        locked -> onLocked()
+                        atLimit -> onLimit()
+                        else -> showSaveDialog = true
+                    }
+                },
+            )
+            // While the arrangement is armed Arrange fills brand-red with a white icon (like an
+            // active loop chip); otherwise it's a plain icon on no background.
+            if (canArrange) {
+                PinnedLoopAction(
+                    icon = ImageVector.vectorResource(R.drawable.ic_queue_music),
+                    contentDescription = stringResource(R.string.cd_arrange),
+                    active = arrangeActive,
+                    onClick = onArrange,
+                )
             }
         }
     }
@@ -2179,6 +2247,37 @@ private fun ArrangeSheet(
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.arrange_repeat_whole))
             }
+        }
+    }
+}
+
+/**
+ * An icon-only action pinned to the right of the scrolling loop chips. Sized to the chip height so
+ * the whole row lines up; [dimmed] marks it unavailable without removing it, and the click still
+ * fires so the caller can explain why.
+ */
+@Composable
+private fun PinnedLoopAction(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    active: Boolean = false,
+    dimmed: Boolean = false,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ControlShape,
+        color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+        contentColor = if (active) MaterialTheme.colorScheme.onPrimary
+        else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.alpha(if (dimmed) LOCKED_ALPHA else 1f),
+    ) {
+        // Match the chip height (32dp) so it lines up with the loop chips beside it.
+        Box(
+            Modifier.height(32.dp).padding(horizontal = 6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = contentDescription)
         }
     }
 }

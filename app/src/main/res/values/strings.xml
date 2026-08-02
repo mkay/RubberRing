@@ -180,7 +180,7 @@
     <string name="help_zoom_title">Zoom &amp; scroll</string>
     <string name="help_zoom_body">Pinch with two fingers to zoom the waveform in and out. When zoomed in, drag in open space to scroll, or use the minimap strip at the bottom.</string>
     <string name="help_save_loop_title">Save a loop</string>
-    <string name="help_save_loop_body">Set the start and end markers, then tap Save to store the region under a name. Saved loops belong to the current track.</string>
+    <string name="help_save_loop_body">Set the start and end markers, then tap + to store the region under a name. Saved loops belong to the current track.</string>
     <string name="help_recall_loop_title">Recall a loop</string>
     <string name="help_recall_loop_body">Tap a saved loop to jump its markers back into place. Long-press it for rename and delete options.</string>
 
@@ -212,8 +212,10 @@
     <string name="play_arrangement">Play arrangement</string>
     <string name="play_play">Play</string>
 
-    <!-- The leading character is a fullwidth plus (U+FF0B), sized to match the chip text. -->
-    <string name="chip_save">＋ Save</string>
+    <string name="cd_save_loop">Save loop</string>
+    <!-- Sits where the loop chips will be, next to the + button, until the first loop is saved.
+         The + is the literal button glyph, so keep it in every translation. -->
+    <string name="loops_empty_hint">Tap + to save your first loop</string>
     <string name="cd_arrange">Arrange</string>
     <string name="save_loop_title">Save loop</string>
     <string name="rename_loop_title">Rename loop</string>
@@ -221,6 +223,8 @@
     <string name="loop_default_name">Loop %1$d</string>
     <!-- Arrange here is the button named by cd_arrange; keep the two matching. -->
     <string name="toast_arrange_locked">Turn off Arrange to use this</string>
+    <!-- Shown when Save is tapped on a track that already holds the maximum; %1$d is that maximum. -->
+    <string name="toast_loop_limit">%1$d loops per track is the limit — delete one to save another</string>
 
     <!-- ===== Arrange sheet ===== -->
 

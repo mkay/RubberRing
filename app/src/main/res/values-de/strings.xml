@@ -40,7 +40,7 @@
 
     <string name="backup_exported">Bibliothek gesichert</string>
     <string name="backup_restored">Bibliothek wiederhergestellt</string>
-    <string name="backup_failed">Sicherung fehlgeschlagen — prüf die Datei und versuch es noch einmal</string>
+    <string name="backup_failed">Sicherung fehlgeschlagen — prüfe die Datei und versuche es noch einmal</string>
 
     <string name="restore_confirm_title">Sicherung wiederherstellen?</string>
     <string name="restore_confirm_body">Das ersetzt deine gesamte aktuelle Bibliothek — alle importierten Tracks und gespeicherten Loops — durch den Inhalt der Sicherung. Das lässt sich nicht rückgängig machen.</string>
@@ -127,17 +127,17 @@
 
     <string name="help_title">Kurzhilfe</string>
     <string name="help_marker_title">Marker verschieben</string>
-    <string name="help_marker_body">Halte den Griff eines Markers (oder seine Linie) gedrückt, bis er greift, und zieh ihn dann. Das kurze Halten verhindert versehentliches Verrutschen.</string>
+    <string name="help_marker_body">Halte den Griff eines Markers (oder seine Linie) gedrückt, bis er greift, und ziehe ihn dann. Das kurze Halten verhindert versehentliches Verrutschen.</string>
     <string name="help_playhead_title">Abspielposition verschieben</string>
-    <string name="help_playhead_body">Tipp irgendwo in den freien Bereich, um die Abspielposition dorthin zu setzen, oder zieh nahe der Abspiellinie, um zu scrubben.</string>
+    <string name="help_playhead_body">Tippe irgendwo in den freien Bereich, um die Abspielposition dorthin zu setzen, oder ziehe nahe der Abspiellinie, um zu scrubben.</string>
     <string name="help_countin_title">Mit Einzähler starten</string>
     <string name="help_countin_body">Halte Abspielen gedrückt, um vor dem Ton einen Einzähler zu hören; ein normaler Tipp startet sofort. Taktart und Länge stellst du unter Optionen ein.</string>
     <string name="help_zoom_title">Zoomen &amp; scrollen</string>
-    <string name="help_zoom_body">Zieh mit zwei Fingern auf, um die Wellenform zu vergrößern oder zu verkleinern. Im gezoomten Zustand ziehst du im freien Bereich zum Scrollen oder nutzt den Übersichtsstreifen unten.</string>
+    <string name="help_zoom_body">Ziehe mit zwei Fingern auf, um die Wellenform zu vergrößern oder zu verkleinern. Im gezoomten Zustand ziehst du im freien Bereich zum Scrollen oder nutzt den Übersichtsstreifen unten.</string>
     <string name="help_save_loop_title">Loop speichern</string>
-    <string name="help_save_loop_body">Setz Start- und Endmarker und tipp dann auf Speichern, um den Bereich unter einem Namen abzulegen. Gespeicherte Loops gehören zum aktuellen Track.</string>
+    <string name="help_save_loop_body">Setze Start- und Endmarker und tippe dann auf +, um den Bereich unter einem Namen abzulegen. Gespeicherte Loops gehören zum aktuellen Track.</string>
     <string name="help_recall_loop_title">Loop aufrufen</string>
-    <string name="help_recall_loop_body">Tipp auf einen gespeicherten Loop, um seine Marker zurückzuholen. Halte ihn gedrückt für Umbenennen und Löschen.</string>
+    <string name="help_recall_loop_body">Tippe auf einen gespeicherten Loop, um seine Marker zurückzuholen. Halte ihn gedrückt für Umbenennen und Löschen.</string>
 
     <string name="library_intro">Wähle eine Audiodatei und markiere einen Abschnitt.</string>
     <string name="library_formats">Unterstützt MP3, AAC (M4A), FLAC, WAV und OGG.</string>
@@ -162,12 +162,14 @@
     <string name="play_arrangement">Arrangement abspielen</string>
     <string name="play_play">Abspielen</string>
 
-    <string name="chip_save">＋ Speichern</string>
+    <string name="cd_save_loop">Loop speichern</string>
+    <string name="loops_empty_hint">Tippe auf +, um deinen ersten Loop zu speichern</string>
     <string name="cd_arrange">Arrangieren</string>
     <string name="save_loop_title">Loop speichern</string>
     <string name="rename_loop_title">Loop umbenennen</string>
     <string name="loop_default_name">Loop %1$d</string>
-    <string name="toast_arrange_locked">Schalt Arrangieren aus, um das zu nutzen</string>
+    <string name="toast_arrange_locked">Schalte Arrangieren aus, um das zu nutzen</string>
+    <string name="toast_loop_limit">Maximal %1$d Loops pro Titel</string>
 
     <string name="arrange_title">Arrangieren</string>
     <string name="arrange_enabled">aktiv</string>
@@ -202,7 +204,7 @@
     <string name="chords_show_title">Akkordspur anzeigen</string>
     <string name="chords_show_body">Akkorde erkennen und über der Wellenform anzeigen. Aus blendet sie ganz aus.</string>
     <string name="chords_edit_title">Akkorde bearbeiten</string>
-    <string name="chords_edit_body">Tipp auf einen Akkord in der Spur, um ihn umzubenennen oder zu teilen; halte eine Grenze gedrückt, um sie zu ziehen (rastet am Beat ein).</string>
+    <string name="chords_edit_body">Tippe auf einen Akkord in der Spur, um ihn umzubenennen oder zu teilen; halte eine Grenze gedrückt, um sie zu ziehen (rastet am Beat ein).</string>
     <string name="chords_persist_note">Deine Änderungen werden mit dem Track gespeichert und beim erneuten Öffnen wiederhergestellt.</string>
     <string name="chords_redetect">Akkorde neu erkennen (Änderungen verwerfen)</string>
 

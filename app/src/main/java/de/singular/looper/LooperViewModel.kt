@@ -76,8 +76,11 @@ private fun Throwable.toErrorMessage(): Int = when (this) {
     else -> R.string.error_unknown
 }
 
-/** Maximum number of named loops a track may hold. */
-const val MAX_SAVED_LOOPS = 4
+/**
+ * Maximum number of named loops a track may hold. The chip row scrolls sideways, so this is a
+ * limit on clutter rather than on space — a loop is only seven scalars in the library index.
+ */
+const val MAX_SAVED_LOOPS = 10
 
 /** Maximum number of steps in a practice arrangement. */
 const val MAX_ARRANGEMENT_STEPS = 16
