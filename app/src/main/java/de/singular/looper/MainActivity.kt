@@ -87,6 +87,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -103,6 +104,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.MultiChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
@@ -227,6 +231,9 @@ private val LooperLightColors = lightColorScheme(
 
 // Controls use a gentle 5px corner rather than the fully-rounded Material default.
 private val ControlShape = RoundedCornerShape(5.dp)
+
+/** Segments in the beat-grid group: Snap, Auto, Tap. */
+private const val GRID_SEGMENTS = 3
 
 // How long the "long-press a marker" hint stays up on a freshly opened track, and how long it
 // takes to fade. Long enough to read once, short enough to stay out of the way.
@@ -2822,83 +2829,52 @@ private fun BeatControls(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Four equal-width chips. Snap is a toggle; Auto/Tap set the tempo; Options opens the
-        // track's extra settings (count-in for now). A centred label keeps them looking uniform.
+        // Snap, Auto and Tap all act on the beat grid, so they share one outline: a segmented
+        // group reads as a single control surface rather than as three neighbours. Options is not
+        // one of them — it opens the track's settings sheet — so it sits apart, past a gap wide
+        // enough to break the row, and as an icon rather than a fourth look-alike label. Its
+        // staying lit while the other three dim under an armed arrangement is the same
+        // distinction stated a second way.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Four chips share the width equally, so the longest label decides whether any of them
-            // fit — and the longest label is whatever the current translation makes it ("Options"
-            // fits, "Optionen" wraps to "Optione / n"). Rather than picking words short enough for
-            // one language, the label shrinks a step or two when it has to. The floor is where it
-            // stops being readable at arm's length on a music stand, which is the real constraint.
-            val chipLabel: @Composable (String) -> Unit = { t ->
-                Text(
-                    t,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    autoSize = TextAutoSize.StepBased(
-                        minFontSize = 11.sp,
-                        maxFontSize = 14.sp, // labelLarge, the chips' natural size
-                        stepSize = 0.5.sp,
-                    ),
+            MultiChoiceSegmentedButtonRow(Modifier.weight(1f).then(dim)) {
+                SegmentedButton(
+                    checked = grid.enabled,
+                    onCheckedChange = { if (locked) onLocked() else viewModel.toggleSnap() },
+                    shape = SegmentedButtonDefaults.itemShape(0, GRID_SEGMENTS, ControlShape),
+                    label = { Text(stringResource(R.string.chip_snap), maxLines = 1) },
                 )
-            }
-            FilterChip(
-                selected = grid.enabled,
-                onClick = { if (locked) onLocked() else viewModel.toggleSnap() },
-                label = { chipLabel(stringResource(R.string.chip_snap)) },
-                shape = ControlShape,
-                modifier = Modifier.weight(1f).then(dim),
-            )
-            FilterChip(
-                selected = false,
-                enabled = !detecting,
-                onClick = { if (locked) onLocked() else viewModel.detectBeats() },
-                label = {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                SegmentedButton(
+                    checked = false,
+                    onCheckedChange = { if (locked) onLocked() else viewModel.detectBeats() },
+                    enabled = !detecting,
+                    shape = SegmentedButtonDefaults.itemShape(1, GRID_SEGMENTS, ControlShape),
+                    // The detect spinner goes in the segment's own icon slot, which is the space
+                    // a checkmark would occupy — so the label doesn't shift when detection runs.
+                    icon = {
                         if (detecting) {
                             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(4.dp))
                         }
-                        // Not chipLabel: this one shares its row with the spinner, so it takes the
-                        // width that's left rather than filling. Same shrink-to-fit rules, though.
-                        Text(
-                            stringResource(R.string.chip_auto),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            autoSize = TextAutoSize.StepBased(
-                                minFontSize = 11.sp,
-                                maxFontSize = 14.sp,
-                                stepSize = 0.5.sp,
-                            ),
-                        )
-                    }
-                },
-                shape = ControlShape,
-                modifier = Modifier.weight(1f).then(dim),
-            )
-            FilterChip(
-                selected = false,
-                onClick = { if (locked) onLocked() else viewModel.tapTempo() },
-                label = { chipLabel(stringResource(R.string.chip_tap)) },
-                shape = ControlShape,
-                modifier = Modifier.weight(1f).then(dim),
-            )
-            FilterChip(
-                selected = false,
-                onClick = onOptions,
-                label = { chipLabel(stringResource(R.string.chip_options)) },
-                shape = ControlShape,
-                modifier = Modifier.weight(1f),
-            )
+                    },
+                    label = { Text(stringResource(R.string.chip_auto), maxLines = 1) },
+                )
+                SegmentedButton(
+                    checked = false,
+                    onCheckedChange = { if (locked) onLocked() else viewModel.tapTempo() },
+                    shape = SegmentedButtonDefaults.itemShape(2, GRID_SEGMENTS, ControlShape),
+                    label = { Text(stringResource(R.string.chip_tap), maxLines = 1) },
+                )
+            }
+            // Tune, not a cog: these are this track's settings, not the app's.
+            IconButton(onClick = onOptions) {
+                Icon(
+                    Icons.Default.Tune,
+                    contentDescription = stringResource(R.string.cd_track_options),
+                )
+            }
         }
 
         // Bottom row: BPM stepper and speed control, each centred in its own half.

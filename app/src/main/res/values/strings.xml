@@ -257,7 +257,6 @@
     <string name="chip_snap">Snap</string>
     <string name="chip_auto">Auto</string>
     <string name="chip_tap">Tap</string>
-    <string name="chip_options">Options</string>
     <!-- BPM = beats per minute. %1$d is the tempo. -->
     <string name="bpm_value">%1$d BPM</string>
     <string name="menu_double_tempo">Double tempo</string>

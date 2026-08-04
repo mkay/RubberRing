@@ -191,7 +191,6 @@
     <string name="chip_snap">Raster</string>
     <string name="chip_auto">Auto</string>
     <string name="chip_tap">Tap</string>
-    <string name="chip_options">Optionen</string>
     <string name="bpm_value">%1$d BPM</string>
     <string name="menu_double_tempo">Tempo verdoppeln</string>
     <string name="menu_halve_tempo">Tempo halbieren</string>
