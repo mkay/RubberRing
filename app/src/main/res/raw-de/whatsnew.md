@@ -9,6 +9,6 @@ gehört nicht hierher.
 
 • Anordnung der Loops per Drag and Drop. (gedrückt halten)
 
-• Ein aufgerufener Loop scrollt auomatisch in den sichtbaren Bereich.
+• Ein aufgerufener Loop scrollt automatisch in den sichtbaren Bereich.
 
 • Eindeutige Loop-Namen werden forciert.
