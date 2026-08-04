@@ -4,8 +4,16 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.9] - 2026-08-04
+
 ### Added
-- A short "What's new" note on the first launch after an update, so a release's changes reach people who never read a changelog. It appears once per version and never on a fresh install, where there is nothing new to report. The text is curated by hand in `res/raw/whatsnew.md` (and `res/raw-de/` for German), covers the current release only, and links out to the full changelog for anyone who skipped a version. It can be read again at any time under Settings → About.
+- Up to ten saved loops per track, instead of four, and the Save button keeps its place beside Arrange rather than disappearing at the cap.
+- Loop chips can be dragged into the order you practise them.
+- A short "What's new" note on the first launch after an update, and never on a fresh install. It covers the current release only and links out to this changelog; Settings → About reopens it.
+
+### Changed
+- Recalling a loop scrolls it into view, and loop names have to be unique within a track.
+- Snap, Auto and Tap now share one outline as a group, since all three act on the beat grid; track options move out of the row to their own button.
 
 ## [0.8] - 2026-07-31
 
@@ -114,7 +122,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.8...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.9...HEAD
+[0.9]: https://github.com/mkay/RubberRing/compare/v0.8...v0.9
 [0.8]: https://github.com/mkay/RubberRing/compare/v0.7.1...v0.8
 [0.7.1]: https://github.com/mkay/RubberRing/compare/v0.7...v0.7.1
 [0.7]: https://github.com/mkay/RubberRing/compare/v0.6...v0.7

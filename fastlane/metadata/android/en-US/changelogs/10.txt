@@ -1,0 +1,5 @@
+• A track can now hold ten saved loops instead of four, and Save keeps its place beside Arrange however many you have.
+• Drag the loop chips to put them in the order you practise them.
+• Recalling a loop scrolls it into view, and loop names stay unique within a track.
+• New: a short "what's new" note on the first launch after an update. Settings → About reopens it.
+• Snap, Auto and Tap now sit together as one group; track options move to their own button.

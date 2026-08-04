@@ -17,11 +17,11 @@ Early-stage release — expect rough edges. Feedback and bug reports welcome via
 - **Waveform loop editing** — drag start/end handles to mark a section; it decodes to PCM and loops via `AudioTrack` loop points, so the boundary wraps with zero audible gap or click.
 - **Editable beat grid** — a dependency-free estimator finds BPM and a downbeat, and handles snap to the grid. Refine it by hand at any time: tap the tempo, nudge ±1 BPM, or halve/double it.
 - **Pitch-preserving speed** — slow down or speed up from 0.5× to 1.5× with a WSOLA time-stretch that keeps the original pitch.
-- **Saved loops** — capture a region + grid per track and recall it later.
+- **Saved loops** — capture a region + grid per track, up to ten of them, and drag the chips into the order you practise them.
 - **Practice arrangements** — chain saved loops into an ordered sequence, each repeated a set number of times and optionally looping the whole set — for drilling A–B–A transitions.
 - **English and German** — picked in Settings or followed from the device, stored as Android's own per-app language. Chords can optionally use German note names (H and B).
 - **Opens audio shared from other apps** — via the share sheet or "Open with".
-- **Session comforts** — System/Light/Dark themes with a theme-aware waveform, follow-playhead auto-scroll, keep-screen-on, library backup & restore, and an in-app quick-help sheet. Preferences persist across launches.
+- **Session comforts** — System/Light/Dark themes with a theme-aware waveform, follow-playhead auto-scroll, keep-screen-on, library backup & restore, an in-app quick-help sheet, and a short "what's new" note on the first launch after an update. Preferences persist across launches.
 
 ## Tech stack
 
