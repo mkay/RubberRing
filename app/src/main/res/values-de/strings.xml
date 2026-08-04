@@ -99,6 +99,12 @@
     <string name="about_section_support">Unterstützen</string>
     <string name="about_body_support">Falls du kannst, unterstütze die Entwicklung:</string>
     <string name="about_section_license">Lizenz</string>
+    <string name="about_section_whats_new">Neuerungen</string>
+    <string name="about_body_whats_new">Neu in dieser Version:</string>
+    <string name="about_whats_new_action">anzeigen</string>
+
+    <string name="whats_new_title">Neu in %1$s</string>
+    <string name="whats_new_changelog">Vollständiges Änderungsprotokoll</string>
 
     <string name="drawer_library">Bibliothek</string>
     <string name="drawer_import">Neue Datei importieren</string>

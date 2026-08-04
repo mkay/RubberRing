@@ -92,6 +92,7 @@ private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_EDGE_INSET = "edge_inset"
 private const val KEY_SHOW_CHORDS = "show_chords"
 private const val KEY_GERMAN_NOTES = "german_notes"
+private const val KEY_WHATS_NEW_SEEN = "whats_new_seen"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
@@ -369,6 +370,54 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         _themeMode.value = mode
         prefs.edit { putString(KEY_THEME_MODE, mode.name) }
     }
+
+    // ---- What's new ----
+
+    // Whether the release notes are on screen. Not persisted: what persists is which version's
+    // notes have been shown (KEY_WHATS_NEW_SEEN), and that deliberately stays out of the backup
+    // JSON — it describes this install's history, not a preference, so restoring a backup made on
+    // another device must not decide whether this one has read the notes.
+    private val _showWhatsNew = MutableStateFlow(false)
+    val showWhatsNew: StateFlow<Boolean> = _showWhatsNew.asStateFlow()
+
+    // Guards the once-per-launch check below against a second run when the activity is recreated
+    // (a theme flip does that, and the view model outlives it).
+    private var whatsNewChecked = false
+
+    /**
+     * Decide whether this launch is the first one on a new version, and if so show the notes.
+     *
+     * [handedOverLaunch] suppresses the whole thing when another app sent us a recording: that
+     * user came to open a file, not to read release notes. Nothing is recorded in that case, so
+     * the next ordinary launch still shows them.
+     */
+    fun checkWhatsNew(handedOverLaunch: Boolean) {
+        if (whatsNewChecked || handedOverLaunch) return
+        whatsNewChecked = true
+        val seen = prefs.getInt(KEY_WHATS_NEW_SEEN, -1)
+        if (seen == BuildConfig.VERSION_CODE) return
+        // Written now rather than on dismissal: if the process is killed while the dialog is up,
+        // the notes have still been seen, and re-showing them every launch would be worse than
+        // missing them once.
+        prefs.edit { putInt(KEY_WHATS_NEW_SEEN, BuildConfig.VERSION_CODE) }
+        // No record at all means either a fresh install — which has nothing "new" to report, and
+        // greeting a first-time user with release notes is just confusing — or an upgrade from a
+        // version that predates this feature, which does. The install timestamps tell them apart.
+        if (seen == -1 && isFreshInstall()) return
+        _showWhatsNew.value = true
+    }
+
+    /** Reopen the notes on demand, from Settings → About. */
+    fun showWhatsNew() { _showWhatsNew.value = true }
+
+    fun dismissWhatsNew() { _showWhatsNew.value = false }
+
+    /** True when this app has been installed but never updated over. */
+    private fun isFreshInstall(): Boolean = runCatching {
+        val app = getApplication<Application>()
+        val info = app.packageManager.getPackageInfo(app.packageName, 0)
+        info.firstInstallTime == info.lastUpdateTime
+    }.getOrDefault(false)
 
     // The live waveform viewport, mirrored up from the waveform so it can be saved on exit.
     private val _viewport = MutableStateFlow(Viewport(1f, 0f))

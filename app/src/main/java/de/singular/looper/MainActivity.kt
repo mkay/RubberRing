@@ -286,6 +286,9 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContent {
             val viewModel: LooperViewModel = viewModel()
+            // Read before the effect below clears it: whether this launch came in through a share
+            // decides whether the release notes are allowed to interrupt it.
+            val handedOverLaunch = remember { handedOver != null }
             LaunchedEffect(handedOver) {
                 val uri = handedOver ?: return@LaunchedEffect
                 handedOver = null
@@ -308,7 +311,7 @@ class MainActivity : AppCompatActivity() {
             }
             MaterialTheme(colorScheme = if (dark) LooperDarkColors else LooperLightColors) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    LooperScreen(viewModel)
+                    LooperScreen(viewModel, handedOverLaunch)
                 }
             }
         }
@@ -331,7 +334,7 @@ private fun audioHandedOver(intent: Intent): Uri? = when (intent.action) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
+fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boolean = false) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val following by viewModel.followPlayhead.collectAsStateWithLifecycle()
     val keepScreenOn by viewModel.keepScreenOn.collectAsStateWithLifecycle()
@@ -419,6 +422,14 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
         )
     }
 
+    // The release notes, on the first launch after an update. Composed before the settings block
+    // below so they survive its early return — that is what lets Settings → About reopen them.
+    val showWhatsNew by viewModel.showWhatsNew.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.checkWhatsNew(handedOverLaunch) }
+    if (showWhatsNew) {
+        WhatsNewDialog(onDismiss = viewModel::dismissWhatsNew)
+    }
+
     // Settings is a full screen shown over whatever's underneath; the confirm-restore dialog and
     // backup-result toast above stay in scope, so Backup/Restore works from here too.
     if (showSettings) {
@@ -437,6 +448,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel()) {
             onSelectTheme = viewModel::setThemeMode,
             onBackup = startBackup,
             onRestore = startRestore,
+            onWhatsNew = viewModel::showWhatsNew,
             onClose = { showSettings = false },
         )
         return
@@ -734,6 +746,7 @@ private fun SettingsScreen(
     onSelectTheme: (ThemeMode) -> Unit,
     onBackup: () -> Unit,
     onRestore: () -> Unit,
+    onWhatsNew: () -> Unit,
     onClose: () -> Unit,
 ) {
     BackHandler(onBack = onClose)
@@ -831,7 +844,7 @@ private fun SettingsScreen(
                     )
                 }
 
-                SettingsTab.ABOUT -> AboutPage()
+                SettingsTab.ABOUT -> AboutPage(onWhatsNew = onWhatsNew)
             }
         }
     }
@@ -953,6 +966,7 @@ private fun SettingsPage(content: @Composable ColumnScope.() -> Unit) {
 
 private const val REPO_URL = "https://github.com/mkay/RubberRing"
 private const val ISSUES_URL = "$REPO_URL/issues"
+private const val CHANGELOG_URL = "$REPO_URL/blob/main/CHANGELOG.md"
 private const val KOFI_URL = "https://ko-fi.com/s1ngular"
 
 /**
@@ -979,7 +993,7 @@ private const val LIKE_URL = "https://singular.de/apps/feedback/?rubberring"
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AboutPage(modifier: Modifier = Modifier) {
+private fun AboutPage(onWhatsNew: () -> Unit, modifier: Modifier = Modifier) {
     val uriHandler = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
     val haptic = LocalHapticFeedback.current
@@ -1033,6 +1047,12 @@ private fun AboutPage(modifier: Modifier = Modifier) {
         AboutSection(stringResource(R.string.about_section_about)) {
             AboutBody(stringResource(R.string.about_body_about))
         }
+        // The notes appear on their own after an update; this is for reading them again once
+        // dismissed, which is otherwise impossible without clearing the app's data.
+        AboutSection(stringResource(R.string.about_section_whats_new)) {
+            AboutBody(stringResource(R.string.about_body_whats_new))
+            AboutLink(stringResource(R.string.about_whats_new_action), onWhatsNew)
+        }
         AboutSection(stringResource(R.string.about_section_website)) {
             AboutBody(stringResource(R.string.about_body_website))
             AboutLink(REPO_URL) { uriHandler.openUri(REPO_URL) }
@@ -1074,11 +1094,14 @@ private fun AboutBody(text: String) {
     Text(text, style = MaterialTheme.typography.bodyMedium)
 }
 
-/** A tappable URL. Kept full-length rather than hidden behind link text so it stays readable. */
+/**
+ * A tappable line in the About page. URLs are kept full-length rather than hidden behind link
+ * text so they stay readable; the same styling carries the one action that stays in the app.
+ */
 @Composable
-private fun AboutLink(url: String, onClick: () -> Unit) {
+private fun AboutLink(text: String, onClick: () -> Unit) {
     Text(
-        url,
+        text,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier
@@ -1362,6 +1385,76 @@ private fun openCustomTab(context: android.content.Context, url: String, toolbar
         Toast.makeText(context, R.string.toast_no_browser, Toast.LENGTH_SHORT).show()
     }
 }
+
+/**
+ * The current release's notes, shown once after an update and reopenable from Settings → About.
+ *
+ * The text comes from `res/raw/whatsnew.md` rather than from a string resource: it is prose that
+ * gets rewritten wholesale every release, and a plain file is far nicer to curate than escaped
+ * XML. Being a resource and not an asset, it still picks up `res/raw-de/` on a German device and
+ * falls back to the default file otherwise — the same rules `values-de/` follows, for free.
+ *
+ * It is rendered verbatim apart from an HTML comment at the top, which carries the note to
+ * whoever edits it next. Nothing else is parsed, so the file must stay plain bullets: no
+ * dependency here can render markdown, and adding one for a dialog this size isn't worth the
+ * download size (or the F-Droid scrutiny).
+ */
+@Composable
+private fun WhatsNewDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val toolbarColor = MaterialTheme.colorScheme.surface
+    // Keyed on the context so a language change, which recreates the activity, re-reads the file
+    // and picks up the other locale's copy.
+    val notes = remember(context) {
+        runCatching {
+            context.resources.openRawResource(R.raw.whatsnew).bufferedReader().use { it.readText() }
+        }.getOrDefault("").replace(EDITOR_NOTE, "").trim()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        // The icon sits beside the title rather than in the dialog's own icon slot, which would
+        // centre it above and push the heading down a line.
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_flare),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(stringResource(R.string.whats_new_title, BuildConfig.VERSION_NAME))
+            }
+        },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(notes, style = MaterialTheme.typography.bodyMedium)
+                // Only this release is described above, so anyone who skipped a version — the
+                // norm on F-Droid, where updates are pulled rather than pushed — gets one link
+                // to the whole history instead of the app carrying it around.
+                Text(
+                    stringResource(R.string.whats_new_changelog),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(ControlShape)
+                        .clickable { openCustomTab(context, CHANGELOG_URL, toolbarColor) }
+                        .padding(vertical = 6.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_got_it)) }
+        },
+    )
+}
+
+/** The editor's note at the top of `whatsnew.md`, stripped before the file is shown. */
+private val EDITOR_NOTE = Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL)
 
 @Composable
 private fun QuickHelpDialog(onDismiss: () -> Unit) {

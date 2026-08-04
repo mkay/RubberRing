@@ -135,6 +135,17 @@
     <string name="about_section_support">Support</string>
     <string name="about_body_support">If you can, support its development:</string>
     <string name="about_section_license">License</string>
+    <string name="about_section_whats_new">What\'s new</string>
+    <string name="about_body_whats_new">The notes shown after the last update:</string>
+    <string name="about_whats_new_action">Show what\'s new</string>
+
+    <!-- ===== What's new ===== -->
+
+    <!-- The notes themselves are not here: they live in res/raw/whatsnew.md (and res/raw-de/),
+         so they can be curated as plain text rather than as escaped XML. %1$s is a version
+         name like 0.9. -->
+    <string name="whats_new_title">What\'s new in %1$s</string>
+    <string name="whats_new_changelog">Full changelog</string>
 
     <!-- Legal notices. Left untranslated on purpose: these state the exact terms the app is
          released under, and a paraphrase in another language could change their meaning. -->

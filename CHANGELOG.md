@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Added
+- A short "What's new" note on the first launch after an update, so a release's changes reach people who never read a changelog. It appears once per version and never on a fresh install, where there is nothing new to report. The text is curated by hand in `res/raw/whatsnew.md` (and `res/raw-de/` for German), covers the current release only, and links out to the full changelog for anyone who skipped a version. It can be read again at any time under Settings → About.
+
 ## [0.8] - 2026-07-31
 
 ### Added

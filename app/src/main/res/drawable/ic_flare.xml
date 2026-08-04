@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Material Symbols "flare". The source artwork uses the Material Symbols viewBox
+    "0 -960 960 960", so the path is shifted down a full viewport to land in 0..960.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M40,-440v-80h240v80H40Zm270,-154l-84,-84 56,-56 84,84 -56,56Zm130,-86v-240h80v240h-80Zm210,86l-56,-56 84,-84 56,56 -84,84Zm30,154v-80h240v80H680Zm-285,45q-35,-35 -35,-85t35,-85q35,-35 85,-35t85,35q35,35 35,85t-35,85q-35,35 -85,35t-85,-35Zm283,169l-84,-84 56,-56 84,84 -56,56Zm-396,0l-56,-56 84,-84 56,56 -84,84ZM440,-40v-240h80v240h-80Z" />
+    </group>
+</vector>
