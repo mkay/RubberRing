@@ -104,7 +104,7 @@
     <string name="about_whats_new_action">anzeigen</string>
 
     <string name="whats_new_title">Neu in %1$s</string>
-    <string name="whats_new_changelog">Vollständiges Änderungsprotokoll</string>
+    <string name="whats_new_changelog">Vollständiges Änderungsprotokoll (EN)</string>
 
     <string name="drawer_library">Bibliothek</string>
     <string name="drawer_import">Neue Datei importieren</string>

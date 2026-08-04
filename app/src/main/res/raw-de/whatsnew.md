@@ -5,10 +5,10 @@ unverändert angezeigt; kurze Stichpunkte, etwa vier. Die Versionsnummer steht i
 gehört nicht hierher.
 -->
 
-• Ein Track fasst jetzt zehn gespeicherte Loops statt vier, und Speichern behält seinen Platz neben Arrangieren, egal wie viele es sind.
+• Es sind nun bis zu 10 gespeicherte Loops möglich. (bislang: 4)
 
-• Ziehe die Loop-Chips, um sie in die Reihenfolge zu bringen, in der du übst.
+• Anordnung der Loops per Drag and Drop. (gedrückt halten)
 
-• Ein aufgerufener Loop wird in den sichtbaren Bereich gescrollt und liegt nicht mehr unsichtbar außerhalb der Reihe.
+• Ein aufgerufener Loop scrollt auomatisch in den sichtbaren Bereich.
 
-• Loop-Namen sind innerhalb eines Tracks eindeutig, damit keine zwei Chips gleich heißen.
+• Eindeutige Loop-Namen werden forciert.

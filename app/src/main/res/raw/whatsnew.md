@@ -9,10 +9,10 @@ what the dialog holds without scrolling. Don't write the version number here; th
 from the build.
 -->
 
-• A track can now hold ten saved loops instead of four, and the Save button keeps its place beside Arrange however many you have.
+• A track can now hold ten saved loops instead of four.
 
-• Drag the loop chips to put them in the order you practise them.
+• Drag and drop the loops to put them in a custom order.
 
-• Recalling a loop scrolls it into view, so it can't sit hidden off the end of the row.
+• Recalling a loop scrolls it into view.
 
-• Loop names stay unique within a track, so no two chips read the same.
+• Unique loop names within a track.
