@@ -222,6 +222,8 @@
     <string name="chords_persist_note">Deine Änderungen werden mit dem Track gespeichert und beim erneuten Öffnen wiederhergestellt.</string>
     <string name="chords_redetect">Akkorde neu erkennen (Änderungen verwerfen)</string>
     <string name="chords_detect_label">Erkennen</string>
+    <string name="chords_overlay_title">Großer Akkord auf der Wellenform</string>
+    <string name="chords_overlay_body">Zeigt den Akkord an der Abspielposition während der Wiedergabe zusätzlich groß über der Wellenform — auch aus Armlänge lesbar, wenn beide Hände beschäftigt sind.</string>
     <string name="chords_detect_chords">Akkorde</string>
     <string name="chords_detect_bass">Basstöne</string>
     <string name="quality_root">Ton</string>

@@ -301,6 +301,8 @@
     <string name="chords_persist_note">Your edits are saved with the track and restored when you reopen it.</string>
     <string name="chords_redetect">Re-detect chords (discard edits)</string>
     <string name="chords_detect_label">Detect</string>
+    <string name="chords_overlay_title">Large chord on the waveform</string>
+    <string name="chords_overlay_body">While playing, also show the chord under the playhead in large type across the waveform — readable at arm’s length with both hands busy.</string>
     <string name="chords_detect_chords">Chords</string>
     <string name="chords_detect_bass">Bass notes</string>
     <string name="quality_root">Note</string>

@@ -100,6 +100,7 @@ private const val KEY_CLICK_THROUGH_LOOP = "click_through_loop"
 private const val KEY_CLICK_VOLUME = "click_volume"
 private const val KEY_CLICK_PITCH = "click_pitch"
 private const val KEY_DETECT_MODE = "detect_mode"
+private const val KEY_CHORD_OVERLAY = "chord_overlay"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
@@ -1124,6 +1125,18 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Discard hand edits for this track and recompute the chords from scratch. */
+    // Whether the chord under the playhead is also drawn large across the waveform. The lane and
+    // the small readout are for reading a timeline; this is for reading at arm's length while both
+    // hands are busy — which is when the 24 dp readout is too small to catch out of the corner of
+    // an eye. Off by default: it costs a lot of visual weight for anyone not playing along.
+    private val _chordOverlay = MutableStateFlow(prefs.getBoolean(KEY_CHORD_OVERLAY, false))
+    val chordOverlay: StateFlow<Boolean> = _chordOverlay.asStateFlow()
+
+    fun setChordOverlay(on: Boolean) {
+        _chordOverlay.value = on
+        prefs.edit { putBoolean(KEY_CHORD_OVERLAY, on) }
+    }
+
     // What the detector listens for. A global preference, like [showChords]: someone who reads the
     // lane for basslines reads it that way on every track. It governs *future* analyses only —
     // switching it deliberately leaves the open track's chords (and any hand edits) alone until

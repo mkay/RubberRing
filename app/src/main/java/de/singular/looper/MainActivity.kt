@@ -24,6 +24,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -162,6 +163,8 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -1819,6 +1822,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val countIn by viewModel.countIn.collectAsStateWithLifecycle()
     val clickThroughLoop by viewModel.clickThroughLoop.collectAsStateWithLifecycle()
     val detectMode by viewModel.detectMode.collectAsStateWithLifecycle()
+    val chordOverlay by viewModel.chordOverlay.collectAsStateWithLifecycle()
     val clickVolume by viewModel.clickVolume.collectAsStateWithLifecycle()
     val clickPitch by viewModel.clickPitch.collectAsStateWithLifecycle()
     val countingIn by viewModel.countingIn.collectAsStateWithLifecycle()
@@ -1927,6 +1931,46 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 onMarkerGrabbed = { hintDone = true },
             )
+
+            // The chord under the playhead, drawn large across the waveform for playing along —
+            // legible from where an instrument puts your eyes, which the lane's own labels and the
+            // readout under the transport are not. Like the hint below it, this takes no touches:
+            // the markers and the seek gesture stay reachable straight through it. Held at partial
+            // alpha so the waveform reads through rather than being covered by it.
+            // Only while playing: stopped, this is a big opaque thing sitting on top of the
+            // waveform you are trying to edit, and the readout under the transport still says what
+            // the chord is. It comes up with the count-in, which is where you want to see the first
+            // chord before it arrives.
+            val overlayName = currentChord?.name(noteNaming).orEmpty()
+            if (showChords && chordOverlay && isPlaying && overlayName.isNotEmpty()) {
+                // Maximum contrast either way round, rather than one fixed pair: a white slab this
+                // large is a lamp in a dark room, which is where a lot of practising happens. The
+                // luminance test is the waveform's own (LoopWaveform picks its palette the same
+                // way), so the tile follows a forced Light/Dark theme and not just the OS setting.
+                val darkUi = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                val tile = if (darkUi) Color(0xFF0E0E0E) else Color.White
+                val ink = if (darkUi) Color.White else Color.Black
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 16.dp)
+                        .clip(ControlShape)
+                        .background(tile.copy(alpha = 0.9f))
+                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                ) {
+                    // Auto-sized rather than fixed: "C#maj7" is three times the width of "E", and a
+                    // fixed size big enough for the short name clips the long one on a narrow phone.
+                    BasicText(
+                        overlayName,
+                        style = TextStyle(color = ink, fontWeight = FontWeight.Bold),
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 32.sp,
+                            maxFontSize = 96.sp,
+                        ),
+                    )
+                }
+            }
 
             // Sits above the waveform but takes no touches of its own — the gesture it describes has
             // to stay available through it, and a hint that ate the taps would be its own bug.
@@ -2097,6 +2141,8 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             onReDetectChords = viewModel::reDetectChords,
             detectMode = detectMode,
             onSetDetectMode = viewModel::setDetectMode,
+            chordOverlay = chordOverlay,
+            onSetChordOverlay = viewModel::setChordOverlay,
             onDismiss = { showOptions = false },
         )
     }
@@ -2967,6 +3013,8 @@ private fun OptionsSheet(
     onReDetectChords: () -> Unit,
     detectMode: DetectMode,
     onSetDetectMode: (DetectMode) -> Unit,
+    chordOverlay: Boolean,
+    onSetChordOverlay: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -3003,6 +3051,7 @@ private fun OptionsSheet(
                 2 -> ChordsTab(
                     showChords, onSetShowChords, chordEditMode, hasChords,
                     onSetChordEditMode, onReDetectChords, detectMode, onSetDetectMode,
+                    chordOverlay, onSetChordOverlay,
                 )
             }
         }
@@ -3117,6 +3166,8 @@ private fun ChordsTab(
     onReDetect: () -> Unit,
     detectMode: DetectMode,
     onSetDetectMode: (DetectMode) -> Unit,
+    chordOverlay: Boolean,
+    onSetChordOverlay: (Boolean) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
@@ -3151,6 +3202,21 @@ private fun ChordsTab(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.chords_overlay_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(R.string.chords_overlay_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = chordOverlay, onCheckedChange = onSetChordOverlay, enabled = showChords)
+    }
+
     Text(stringResource(R.string.chords_detect_label), style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(
