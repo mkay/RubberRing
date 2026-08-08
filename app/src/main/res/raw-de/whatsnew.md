@@ -5,10 +5,10 @@ unverändert angezeigt; kurze Stichpunkte, etwa vier. Die Versionsnummer steht i
 gehört nicht hierher.
 -->
 
-• Es sind nun bis zu 10 gespeicherte Loops möglich. (bislang: 4)
+• Der Klick läuft auf Wunsch durch die ganze Schleife weiter, nicht mehr nur beim Einzählen.
 
-• Anordnung der Loops per Drag and Drop. (gedrückt halten)
+• Lautstärke einstellen und zwischen drei Klanghöhen wählen — unter Optionen → Klick, wo vorher „Einzählen“ stand.
 
-• Ein aufgerufener Loop scrollt automatisch in den sichtbaren Bereich.
+• Die Musik weicht unter jedem Klick ein wenig zurück, damit er sich auch in einem lauten Mix durchsetzt.
 
-• Eindeutige Loop-Namen werden forciert.
+• Das Einzählen trifft jetzt genau den Schlag, auf dem die Musik einsetzt — auf jedem Gerät.
