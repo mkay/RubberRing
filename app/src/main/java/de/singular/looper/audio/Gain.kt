@@ -101,8 +101,13 @@ object Gain {
         }
     }
 
-    /** Linear below the knee, tanh above it — |output| stays below 1f for any input. */
-    private fun softClip(x: Float): Float {
+    /**
+     * Linear below the knee, tanh above it — |output| stays below 1f for any input.
+     *
+     * Public because [ClickTrack] needs the same curve: a click loud enough to be heard over a
+     * mastered track has to be allowed past full scale, and it should bend there rather than break.
+     */
+    fun softClip(x: Float): Float {
         val mag = abs(x)
         if (mag <= SOFT_KNEE) return x
         val over = (mag - SOFT_KNEE) / (1f - SOFT_KNEE)

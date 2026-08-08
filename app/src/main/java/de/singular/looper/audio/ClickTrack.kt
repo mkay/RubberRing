@@ -3,6 +3,7 @@
 package de.singular.looper.audio
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.sin
@@ -57,9 +58,16 @@ class ClickTrack(
             voices = render(value) // two 30 ms buffers; cheap enough to do on the caller's thread
         }
 
+    /**
+     * One rendered timbre: the click itself, normalised to full scale, and the envelope it was
+     * shaped with. The envelope is kept because the ducking below needs the click's *shape*, not
+     * its waveform — multiplying the music by the oscillating waveform would ring-modulate it.
+     */
+    private class Voice(val pcm: ShortArray, val env: FloatArray)
+
     /** The two rendered timbres, swapped as a pair so a pitch change can never half-apply. */
-    private class Voices(val accent: ShortArray, val plain: ShortArray) {
-        val longest = maxOf(accent.size, plain.size)
+    private class Voices(val accent: Voice, val plain: Voice) {
+        val longest = maxOf(accent.pcm.size, plain.pcm.size)
     }
 
     /**
@@ -90,24 +98,32 @@ class ClickTrack(
         val first = floor((startFrame - v.longest - grid.firstBeatFrame) / grid.framesPerBeat).toLong()
         val last = floor((until - 1 - grid.firstBeatFrame) / grid.framesPerBeat).toLong()
 
+        val amp = g * MAX_GAIN
         var b = first
         while (b <= last) {
             val at = grid.firstBeatFrame + Math.round(b * grid.framesPerBeat)
             // floorMod, so beats before the downbeat accent correctly rather than skewing the bar.
-            val click = if (Math.floorMod(b + grid.barPhase, grid.beatsPerBar.toLong()) == 0L) {
+            val voice = if (Math.floorMod(b + grid.barPhase, grid.beatsPerBar.toLong()) == 0L) {
                 v.accent
             } else {
                 v.plain
             }
             val from = maxOf(at, startFrame)
-            val to = minOf(at + click.size, until)
+            val to = minOf(at + voice.pcm.size, until)
             var f = from
             while (f < to) {
-                val sample = (click[(f - at).toInt()] * g).toInt()
+                val idx = (f - at).toInt()
+                val click = (voice.pcm[idx] / FULL_SCALE) * amp
+                // Duck the music under the click, by the click's own envelope. Shaped like the
+                // click and gone in 30 ms, so it reads as the click cutting through rather than as
+                // the track dipping — and it is what buys audibility over a mastered mix without
+                // simply driving the sum into the clipper.
+                val duck = 1f - DUCK_DEPTH * g * voice.env[idx]
                 var i = destOffset + (f - startFrame).toInt() * channels
                 val end = i + channels
                 while (i < end) {
-                    dest[i] = (dest[i] + sample).coerceIn(-32_768, 32_767).toShort()
+                    val mixed = Gain.softClip((dest[i] / FULL_SCALE) * duck + click)
+                    dest[i] = (mixed * FULL_SCALE).toInt().coerceIn(-32_768, 32_767).toShort()
                     i++
                 }
                 f++
@@ -126,31 +142,49 @@ class ClickTrack(
         plain = renderClick(pitch.plainHz),
     )
 
-    private fun renderClick(freq: Float): ShortArray {
+    private fun renderClick(freq: Float): Voice {
         val n = sampleRate * DURATION_MS / 1_000
-        val out = ShortArray(n)
+        val raw = FloatArray(n)
+        val env = FloatArray(n)
+        var peak = 0f
         for (i in 0 until n) {
             val t = i.toFloat() / sampleRate
-            val env = exp(-9f * t * (1_000f / DURATION_MS)) // fast decay → short, dry
+            env[i] = exp(-9f * t * (1_000f / DURATION_MS)) // fast decay → short, dry
             val tone = sin(2.0 * PI * freq * t).toFloat() +
                 0.6f * sin(2.0 * PI * freq * 2.76 * t).toFloat()
-            out[i] = (tone * env * HEADROOM * Short.MAX_VALUE).toInt().toShort()
+            raw[i] = tone * env[i]
+            val mag = abs(raw[i])
+            if (mag > peak) peak = mag
         }
-        return out
+        // Normalised rather than scaled by a constant: the fundamental and its inharmonic partial
+        // sum to a different peak at every pitch, so a fixed factor would have left each pitch a
+        // different amount of the range unused — and would have wrapped if it ever overshot.
+        val norm = if (peak > 0f) Short.MAX_VALUE / peak else 0f
+        val pcm = ShortArray(n) { (raw[it] * norm).toInt().coerceIn(-32_768, 32_767).toShort() }
+        return Voice(pcm, env)
     }
 
     companion object {
         const val DURATION_MS = 30
 
         /**
-         * Peak of a rendered click at gain 1f. Half scale, because this one is *added* to music
-         * that may already be near full scale — the room it leaves is what stops a click landing
-         * on a loud downbeat from clipping the pair of them.
+         * What the slider's top end means, as a multiple of full scale. Past 1× the click is
+         * deliberately louder than any sample can be on its own, and [Gain.softClip] bends what
+         * will not fit — a click has to sit *over* a mastered track, not politely beneath it,
+         * and 0 dBFS against a track already mastered to 0 dBFS is not "loud", it is "equal".
          */
-        private const val HEADROOM = 0.5f
+        private const val MAX_GAIN = 2.5f
+
+        /**
+         * How far the music is pulled down under a click at full slider, as a fraction. Applied
+         * through the click's own envelope, so it lasts as long as the click does.
+         */
+        private const val DUCK_DEPTH = 0.45f
+
+        private const val FULL_SCALE = 32_768f
 
         /** Where the volume slider starts: audible over most material without burying it. */
-        const val DEFAULT_GAIN = 0.7f
+        const val DEFAULT_GAIN = 0.5f
     }
 }
 

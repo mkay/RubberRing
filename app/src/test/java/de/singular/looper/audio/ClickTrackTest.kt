@@ -114,22 +114,51 @@ class ClickTrackTest {
     }
 
     @Test
-    fun `gain scales the click`() {
-        val loud = render(click(gain = 1f), grid(), startFrame = 0, frames = 2_000)
-        val quiet = render(click(gain = 0.5f), grid(), startFrame = 0, frames = 2_000)
+    fun `gain scales the click linearly while it stays under the knee`() {
+        // Low settings only: the top of the slider deliberately drives the click past full scale,
+        // where the soft knee bends it and a peak ratio stops meaning anything.
+        val loud = render(click(gain = 0.2f), grid(), startFrame = 0, frames = 2_000)
+        val quiet = render(click(gain = 0.1f), grid(), startFrame = 0, frames = 2_000)
         val loudPeak = loud.maxOf { abs(it.toInt()) }
         val quietPeak = quiet.maxOf { abs(it.toInt()) }
-        assertTrue(quietPeak in (loudPeak / 2 - 2)..(loudPeak / 2 + 2))
+        assertTrue(
+            "expected roughly half, got $quietPeak of $loudPeak",
+            quietPeak in (loudPeak / 2 - 32)..(loudPeak / 2 + 32),
+        )
     }
 
     @Test
-    fun `mixing adds to existing audio and saturates instead of wrapping`() {
+    fun `the music is ducked under the click and untouched on either side`() {
+        val frames = 4_000
+        val bed: Short = 10_000
+        val beat = 1_000
+        val out = ShortArray(frames) { bed }
+        click(gain = 1f).mixInto(out, 0, frames, 1, 0L, grid(firstBeatFrame = beat.toLong()))
+
+        val clickEnd = beat + sampleRate * ClickTrack.DURATION_MS / 1_000
+        assertTrue(
+            "nothing before the beat may move",
+            out.copyOfRange(0, beat).all { it == bed },
+        )
+        assertTrue(
+            "the music must come back once the click has decayed",
+            out.copyOfRange(clickEnd, frames).all { it == bed },
+        )
+        // Somewhere under the click the bed is pulled down — that is what makes the click cut
+        // through a mastered mix instead of just adding to it until the clipper takes over.
+        val underClick = out.copyOfRange(beat, clickEnd)
+        assertTrue("the music should duck under the click", underClick.any { it < bed })
+    }
+
+    @Test
+    fun `an over-driven click saturates instead of wrapping`() {
         val frames = 2_000
-        // A bed already at full scale: a click on top must clamp, not fold over to negative.
+        // Full-scale bed plus a click at the top of the slider: far past what a sample can hold.
         val out = ShortArray(frames) { Short.MAX_VALUE }
-        click().mixInto(out, 0, frames, 1, 0L, grid())
-        assertTrue("clamped, never wrapped", out.all { it > 0 })
-        assertEquals(Short.MAX_VALUE, out.max())
+        click(gain = 1f).mixInto(out, 0, frames, 1, 0L, grid())
+        // The knee saturates towards full scale and never past it, so nothing can fold over.
+        assertTrue("no sample may wrap to the opposite rail", out.none { it == Short.MIN_VALUE })
+        assertTrue("and it should still be loud", out.maxOf { abs(it.toInt()) } > 29_000)
     }
 
     @Test
