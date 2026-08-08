@@ -300,6 +300,9 @@
     <string name="chords_edit_body">Tap a chord in the lane to relabel or split it; long-press a boundary to drag it (snaps to the beat).</string>
     <string name="chords_persist_note">Your edits are saved with the track and restored when you reopen it.</string>
     <string name="chords_redetect">Re-detect chords (discard edits)</string>
+    <string name="chords_detect_label">Detect</string>
+    <string name="chords_detect_chords">Chords</string>
+    <string name="chords_detect_bass">Bass notes</string>
 
     <!-- ===== Count-in tab ===== -->
 

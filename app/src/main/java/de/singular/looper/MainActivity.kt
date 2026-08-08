@@ -202,6 +202,7 @@ import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.Chord
 import de.singular.looper.audio.ClickPitch
+import de.singular.looper.audio.DetectMode
 import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.audio.NoteNaming
 import de.singular.looper.audio.Quality
@@ -1813,6 +1814,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val stretching by viewModel.stretching.collectAsStateWithLifecycle()
     val countIn by viewModel.countIn.collectAsStateWithLifecycle()
     val clickThroughLoop by viewModel.clickThroughLoop.collectAsStateWithLifecycle()
+    val detectMode by viewModel.detectMode.collectAsStateWithLifecycle()
     val clickVolume by viewModel.clickVolume.collectAsStateWithLifecycle()
     val clickPitch by viewModel.clickPitch.collectAsStateWithLifecycle()
     val countingIn by viewModel.countingIn.collectAsStateWithLifecycle()
@@ -2089,6 +2091,8 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             hasChords = (chords?.spans?.isNotEmpty() == true),
             onSetChordEditMode = viewModel::setChordEditMode,
             onReDetectChords = viewModel::reDetectChords,
+            detectMode = detectMode,
+            onSetDetectMode = viewModel::setDetectMode,
             onDismiss = { showOptions = false },
         )
     }
@@ -2957,6 +2961,8 @@ private fun OptionsSheet(
     hasChords: Boolean,
     onSetChordEditMode: (Boolean) -> Unit,
     onReDetectChords: () -> Unit,
+    detectMode: DetectMode,
+    onSetDetectMode: (DetectMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -2990,7 +2996,10 @@ private fun OptionsSheet(
                     clickPitch, onSetClickPitch,
                 )
                 1 -> AudioTab(normalize, normalizeGainDb, onSetNormalize)
-                2 -> ChordsTab(showChords, onSetShowChords, chordEditMode, hasChords, onSetChordEditMode, onReDetectChords)
+                2 -> ChordsTab(
+                    showChords, onSetShowChords, chordEditMode, hasChords,
+                    onSetChordEditMode, onReDetectChords, detectMode, onSetDetectMode,
+                )
             }
         }
     }
@@ -3099,6 +3108,8 @@ private fun ChordsTab(
     hasChords: Boolean,
     onSetEditMode: (Boolean) -> Unit,
     onReDetect: () -> Unit,
+    detectMode: DetectMode,
+    onSetDetectMode: (DetectMode) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
@@ -3133,6 +3144,23 @@ private fun ChordsTab(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    // PROTOTYPE: pick what to listen for, then tap Re-detect to hear it. Unpersisted on purpose —
+    // see LooperViewModel.setDetectMode.
+    Text(stringResource(R.string.chords_detect_label), style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            DetectMode.CHORDS to R.string.chords_detect_chords,
+            DetectMode.BASS to R.string.chords_detect_bass,
+        ).forEach { (m, label) ->
+            FilterChip(
+                selected = detectMode == m,
+                onClick = { onSetDetectMode(m) },
+                label = { Text(stringResource(label)) },
+                shape = ControlShape,
+                enabled = showChords,
+            )
+        }
+    }
     TextButton(onClick = onReDetect, enabled = showChords && hasChords) {
         Text(stringResource(R.string.chords_redetect))
     }

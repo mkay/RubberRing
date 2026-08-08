@@ -221,6 +221,9 @@
     <string name="chords_edit_body">Tippe auf einen Akkord in der Spur, um ihn umzubenennen oder zu teilen; halte eine Grenze gedrückt, um sie zu ziehen (rastet am Beat ein).</string>
     <string name="chords_persist_note">Deine Änderungen werden mit dem Track gespeichert und beim erneuten Öffnen wiederhergestellt.</string>
     <string name="chords_redetect">Akkorde neu erkennen (Änderungen verwerfen)</string>
+    <string name="chords_detect_label">Erkennen</string>
+    <string name="chords_detect_chords">Akkorde</string>
+    <string name="chords_detect_bass">Basstöne</string>
 
     <string name="countin_intro">Halte Abspielen gedrückt, um mit einem Einzähler zu starten: Klicks im Tempo des Tracks (%1$d BPM), bevor die Wiedergabe beginnt.</string>
     <string name="countin_beats_per_bar">Schläge pro Takt</string>

@@ -20,6 +20,7 @@ import de.singular.looper.audio.ClickGrid
 import de.singular.looper.audio.ClickPitch
 import de.singular.looper.audio.ClickTrack
 import de.singular.looper.audio.DecodedAudio
+import de.singular.looper.audio.DetectMode
 import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.NormalizeMode
@@ -1066,7 +1067,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         val g = _grid.value
         val beat = if (g.enabled && g.bpm > 0f) BeatEstimate(g.bpm, g.downbeatFrac) else null
         chordJob = viewModelScope.launch {
-            val track = withContext(Dispatchers.Default) { ChordDetector.detect(audio, beat) }
+            val track = withContext(Dispatchers.Default) { ChordDetector.detect(audio, beat, _detectMode.value) }
             _chords.value = track
         }
     }
@@ -1122,6 +1123,16 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Discard hand edits for this track and recompute the chords from scratch. */
+    // PROTOTYPE — what the detector listens for. Deliberately NOT persisted and NOT in the backup
+    // format: this exists to be heard on real tracks and then either finished or deleted. Changing
+    // it does nothing until Re-detect is tapped, which is what makes it cheap.
+    private val _detectMode = MutableStateFlow(DetectMode.CHORDS)
+    val detectMode: StateFlow<DetectMode> = _detectMode.asStateFlow()
+
+    fun setDetectMode(mode: DetectMode) {
+        _detectMode.value = mode
+    }
+
     fun reDetectChords() {
         val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
         currentTrack?.takeIf { it.chords.isNotEmpty() }?.let {

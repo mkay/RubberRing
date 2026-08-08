@@ -31,8 +31,24 @@ private val ROOT_NAMES_DE = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "
 fun rootNames(naming: NoteNaming): Array<String> =
     if (naming == NoteNaming.GERMAN) ROOT_NAMES_DE else ROOT_NAMES
 
-/** A chord quality. Triads plus the two common sevenths; DOM7/SUS are reserved for a later pass. */
-enum class Quality { MAJ, MIN, MAJ7, MIN7, NONE }
+/**
+ * A chord quality. Triads plus the two common sevenths; DOM7/SUS are reserved for a later pass.
+ *
+ * [ROOT] is not a chord at all — it is a single note, what [DetectMode.BASS] produces. It shares
+ * [Chord] so the lane, the edits and the library format need no second type.
+ */
+enum class Quality { MAJ, MIN, MAJ7, MIN7, ROOT, NONE }
+
+/**
+ * What the detector is listening for.
+ *
+ * [CHORDS] reads the whole musical band and names the harmony — right for anyone playing chords.
+ * [BASS] reads only the bottom of the spectrum and names the single note it finds there, which is
+ * a different answer whenever the bass is not on the chord's root: over a C major triad with E at
+ * the bottom, [CHORDS] says C and [BASS] says E. Both are correct; which one is useful depends on
+ * what you are holding.
+ */
+enum class DetectMode { CHORDS, BASS }
 
 /** A recognised chord: a root pitch class (0 = C) and a quality. NONE means "no chord / silence". */
 data class Chord(val root: Int, val quality: Quality) {
@@ -44,6 +60,7 @@ data class Chord(val root: Int, val quality: Quality) {
             Quality.MIN -> root + "m"
             Quality.MAJ7 -> root + "maj7"
             Quality.MIN7 -> root + "m7"
+            Quality.ROOT -> root // a single note: just its name
             Quality.NONE -> ""
         }
     }
@@ -160,6 +177,71 @@ object ChordDetector {
         when (label % QUALITIES) { 0, 1 -> 0f; else -> -SEVENTH_BIAS }
     }
 
+    // ---- Vocabularies ----
+
+    /**
+     * Everything that differs between [DetectMode]s: which part of the spectrum to look at, how
+     * finely to resolve it, what set of things to match, and how a winning label reads back as a
+     * [Chord]. Everything downstream — smoothing, Viterbi, segmentation — is shared.
+     */
+    private class Vocabulary(
+        val count: Int,
+        val templates: Array<FloatArray>,
+        val bias: FloatArray,
+        val fftSize: Int,
+        val minHz: Float,
+        val maxHz: Float,
+        val toChord: (Int) -> Chord,
+    )
+
+    private val CHORD_VOCAB = Vocabulary(
+        count = CHORD_COUNT,
+        templates = TEMPLATES,
+        bias = QUALITY_BIAS,
+        fftSize = FFT_SIZE,
+        minHz = MIN_FREQ_HZ,
+        maxHz = MAX_FREQ_HZ,
+        toChord = ::chordForLabel,
+    )
+
+    /**
+     * The bass vocabulary: twelve single notes, read from the bottom of the spectrum only.
+     *
+     * **Band.** 40 Hz clears a 4-string bass's low E (41 Hz); the 350 Hz ceiling is the whole point
+     * of the mode — it is below most of where a vocal lives, so a loud singer stops outvoting the
+     * bass in the fold. A male vocal's *fundamental* does overlap the top of this band, which is
+     * the known weak spot.
+     *
+     * **Resolution.** A semitone at 41 Hz is only ~2.4 Hz wide, and the chord front-end's 8192-point
+     * FFT has ~5.4 Hz bins — wider than the note, so the bottom octave smears. 16384 halves that to
+     * ~2.7 Hz. Not enough to separate two adjacent semitones down at the very bottom on its own,
+     * but the templates match a *harmonic series*, and the 2nd and 3rd harmonics (82 Hz, 123 Hz for
+     * that low E) are resolved comfortably — which is also what tells a plucked note apart from a
+     * kick drum, since a kick has energy down there but no harmonic ladder above it.
+     *
+     * The cost is time: a 16384 window is ~371 ms, so a bass line moving faster than that smears.
+     * Beat-synchronous segmentation already averages within a beat, which hides most of it.
+     */
+    private val BASS_VOCAB = Vocabulary(
+        count = CHROMA_BINS,
+        templates = Array(CHROMA_BINS) { note ->
+            val t = FloatArray(CHROMA_BINS)
+            for (n in HARMONIC_OFFSETS.indices) {
+                t[(note + HARMONIC_OFFSETS[n]) % CHROMA_BINS] += HARMONIC_WEIGHTS[n]
+            }
+            centreAndNormalise(t)
+            t
+        },
+        bias = FloatArray(CHROMA_BINS), // no note is a priori likelier than another
+        fftSize = 16_384,
+        minHz = 40f,
+        maxHz = 350f,
+        toChord = { label -> Chord(label, Quality.ROOT) },
+    )
+
+    private fun vocabularyFor(mode: DetectMode) =
+        if (mode == DetectMode.BASS) BASS_VOCAB else CHORD_VOCAB
+
     /** The chord tones (as pitch classes, possibly ≥12) for a template [label]. */
     private fun tonesFor(label: Int): IntArray {
         val root = label / QUALITIES
@@ -180,33 +262,39 @@ object ChordDetector {
      * musical positions and the classifier can't invent a change in the middle of a held chord.
      * Without it (or at an implausible tempo), it falls back to frame-level segmentation.
      */
-    fun detect(audio: DecodedAudio, beat: BeatEstimate? = null): ChordTrack? {
+    fun detect(
+        audio: DecodedAudio,
+        beat: BeatEstimate? = null,
+        mode: DetectMode = DetectMode.CHORDS,
+    ): ChordTrack? {
         val frames = audio.frameCount
         val hops = frames / HOP
         if (hops < 8) return null
 
-        val (chroma, energy) = chromagram(audio, hops) ?: return null
+        val vocab = vocabularyFor(mode)
+        val (chroma, energy) = chromagram(audio, hops, vocab) ?: return null
 
         // Energy gate from the median frame energy: robust to a few very loud or very quiet frames.
         val energyFloor = median(energy) * ENERGY_GATE
         val fps = audio.sampleRate.toFloat() / HOP
 
         val spans = if (beat != null && beat.bpm >= MIN_USABLE_BPM)
-            segmentByBeats(chroma, energy, energyFloor, hops, frames, fps, beat)
+            segmentByBeats(chroma, energy, energyFloor, hops, frames, fps, beat, vocab)
         else
-            segmentByFrames(chroma, energy, energyFloor, hops, frames, fps)
+            segmentByFrames(chroma, energy, energyFloor, hops, frames, fps, vocab)
         return if (spans.isEmpty()) null else ChordTrack(spans)
     }
 
     /** Frame-level segmentation: classify each frame, mode-smooth, coalesce, merge tiny spans. */
     private fun segmentByFrames(
         chroma: FloatArray, energy: FloatArray, energyFloor: Float, hops: Int, frames: Int, fps: Float,
+        vocab: Vocabulary,
     ): List<ChordSpan> {
         val labels = IntArray(hops) { h ->
-            if (energy[h] < energyFloor) NO_CHORD else classify(chroma, h)
+            if (energy[h] < energyFloor) NO_CHORD else classify(chroma, h, vocab)
         }
-        val smoothed = modeFilter(labels, radius = (SMOOTH_SECONDS * fps / 2f).roundToInt().coerceAtLeast(1))
-        return segment(smoothed, chroma, frames, minHops = (MIN_SPAN_SECONDS * fps).roundToInt().coerceAtLeast(1))
+        val smoothed = modeFilter(labels, radius = (SMOOTH_SECONDS * fps / 2f).roundToInt().coerceAtLeast(1), vocab)
+        return segment(smoothed, chroma, frames, minHops = (MIN_SPAN_SECONDS * fps).roundToInt().coerceAtLeast(1), vocab)
     }
 
     /**
@@ -217,10 +305,10 @@ object ChordDetector {
      */
     private fun segmentByBeats(
         chroma: FloatArray, energy: FloatArray, energyFloor: Float,
-        hops: Int, frames: Int, fps: Float, beat: BeatEstimate,
+        hops: Int, frames: Int, fps: Float, beat: BeatEstimate, vocab: Vocabulary,
     ): List<ChordSpan> {
         val beatHops = 60f / beat.bpm * fps
-        if (beatHops < 1f) return segmentByFrames(chroma, energy, energyFloor, hops, frames, fps)
+        if (beatHops < 1f) return segmentByFrames(chroma, energy, energyFloor, hops, frames, fps, vocab)
         val downbeatHop = beat.downbeatFrac * frames / HOP
 
         // Beat boundaries in hops: 0, then every beat line strictly inside the clip, then hops.
@@ -239,7 +327,7 @@ object ChordDetector {
         // gate flag when the beat is near-silent (forced to NO_CHORD downstream).
         val beatCount = boundaries.size - 1
         val gated = BooleanArray(beatCount)
-        val emissions = Array(beatCount) { FloatArray(CHORD_COUNT) }
+        val emissions = Array(beatCount) { FloatArray(vocab.count) }
         val mean = FloatArray(CHROMA_BINS)
         for (i in 0 until beatCount) {
             val lo = boundaries[i]
@@ -252,10 +340,10 @@ object ChordDetector {
                 for (b in 0 until CHROMA_BINS) mean[b] += chroma[off + b]
                 e += energy[h]
             }
-            if (e / (hi - lo) < energyFloor) gated[i] = true else correlations(mean, emissions[i])
+            if (e / (hi - lo) < energyFloor) gated[i] = true else correlations(mean, emissions[i], vocab)
         }
 
-        val smoothed = viterbi(emissions, gated)
+        val smoothed = viterbi(emissions, gated, vocab)
 
         // Coalesce runs of equal beats into spans, positioned by fraction.
         val spans = ArrayList<ChordSpan>()
@@ -266,7 +354,7 @@ object ChordDetector {
             if (smoothed[i] != NO_CHORD) {
                 val startFrac = (boundaries[i].toLong() * HOP).toFloat() / frames
                 val endFrac = if (j + 1 == beatCount) 1f else (boundaries[j + 1].toLong() * HOP).toFloat() / frames
-                spans.add(ChordSpan(startFrac.coerceIn(0f, 1f), endFrac.coerceIn(0f, 1f), labelToChord(smoothed[i])))
+                spans.add(ChordSpan(startFrac.coerceIn(0f, 1f), endFrac.coerceIn(0f, 1f), labelToChord(smoothed[i], vocab)))
             }
             i = j + 1
         }
@@ -277,7 +365,8 @@ object ChordDetector {
      * Build the chromagram: for each hop a 12-bin pitch-class vector plus that frame's total in-band
      * energy (used by the silence gate). Returns null if nothing lands in the musical band.
      */
-    private fun chromagram(audio: DecodedAudio, hops: Int): Pair<FloatArray, FloatArray>? {
+    private fun chromagram(audio: DecodedAudio, hops: Int, vocab: Vocabulary): Pair<FloatArray, FloatArray>? {
+        val fftSize = vocab.fftSize
         val pcm = audio.pcm
         val channels = audio.channels
         val frames = audio.frameCount
@@ -285,21 +374,21 @@ object ChordDetector {
 
         // Precompute the pitch class of every FFT bin once (depends only on the sample rate); bins
         // outside the musical band are marked -1 and skipped.
-        val bins = FFT_SIZE / 2 + 1
+        val bins = fftSize / 2 + 1
         val binPitchClass = IntArray(bins) { -1 }
         for (k in 1 until bins) {
-            val freq = k.toFloat() * sampleRate / FFT_SIZE
-            if (freq < MIN_FREQ_HZ || freq > MAX_FREQ_HZ) continue
+            val freq = k.toFloat() * sampleRate / fftSize
+            if (freq < vocab.minHz || freq > vocab.maxHz) continue
             // MIDI note number; 69 = A4 = 440 Hz. Pitch class = note mod 12, with 69 mod 12 = 9 = A,
             // so index 0 falls on C, matching ROOT_NAMES.
             val midi = 69.0 + 12.0 * (ln((freq / 440f).toDouble()) / ln(2.0))
             binPitchClass[k] = ((midi.roundToInt() % 12) + 12) % 12
         }
 
-        val window = FloatArray(FFT_SIZE) { 0.5f - 0.5f * cos(2.0 * PI * it / (FFT_SIZE - 1)).toFloat() }
-        val re = FloatArray(FFT_SIZE)
-        val im = FloatArray(FFT_SIZE)
-        val half = FFT_SIZE / 2
+        val window = FloatArray(fftSize) { 0.5f - 0.5f * cos(2.0 * PI * it / (fftSize - 1)).toFloat() }
+        val re = FloatArray(fftSize)
+        val im = FloatArray(fftSize)
+        val half = fftSize / 2
 
         val chroma = FloatArray(hops * CHROMA_BINS)
         val energy = FloatArray(hops)
@@ -307,7 +396,7 @@ object ChordDetector {
 
         for (h in 0 until hops) {
             val center = h * HOP
-            for (n in 0 until FFT_SIZE) {
+            for (n in 0 until fftSize) {
                 val idx = center - half + n
                 var mono = 0f
                 if (idx in 0 until frames) {
@@ -342,11 +431,15 @@ object ChordDetector {
     }
 
     /** Best triad for the frame at [h] — see [bestLabel]. */
-    private fun classify(chroma: FloatArray, h: Int): Int = bestLabel(chroma, h * CHROMA_BINS)
+    private fun classify(chroma: FloatArray, h: Int, vocab: Vocabulary): Int =
+        bestLabel(chroma, h * CHROMA_BINS, vocab)
 
-    /** Turn a label back into a chord. */
-    private fun labelToChord(label: Int): Chord {
-        if (label == NO_CHORD) return Chord.NONE
+    /** Turn a label back into a chord, however this vocabulary spells one. */
+    private fun labelToChord(label: Int, vocab: Vocabulary): Chord =
+        if (label == NO_CHORD) Chord.NONE else vocab.toChord(label)
+
+    /** The chord vocabulary's own label mapping: root * QUALITIES + quality index. */
+    private fun chordForLabel(label: Int): Chord {
         val quality = when (label % QUALITIES) {
             0 -> Quality.MAJ
             1 -> Quality.MIN
@@ -357,10 +450,10 @@ object ChordDetector {
     }
 
     /** Most common label within ±[radius] of each position — categorical smoothing that kills flicker. */
-    private fun modeFilter(labels: IntArray, radius: Int): IntArray {
+    private fun modeFilter(labels: IntArray, radius: Int, vocab: Vocabulary): IntArray {
         val n = labels.size
         val out = IntArray(n)
-        val counts = IntArray(CHORD_COUNT) // chord labels; NO_CHORD tracked separately
+        val counts = IntArray(vocab.count) // labels; NO_CHORD tracked separately
         for (i in 0 until n) {
             counts.fill(0)
             var noChord = 0
@@ -372,7 +465,7 @@ object ChordDetector {
             }
             var bestLabel = NO_CHORD
             var bestCount = noChord
-            for (l in 0 until CHORD_COUNT) if (counts[l] > bestCount) { bestCount = counts[l]; bestLabel = l }
+            for (l in 0 until vocab.count) if (counts[l] > bestCount) { bestCount = counts[l]; bestLabel = l }
             out[i] = bestLabel
         }
         return out
@@ -383,7 +476,9 @@ object ChordDetector {
      * steadier read than any single frame), then merge runs shorter than [minHops] into whichever
      * neighbour they resemble most. NO_CHORD runs are dropped, leaving gaps in the lane.
      */
-    private fun segment(labels: IntArray, chroma: FloatArray, frames: Int, minHops: Int): List<ChordSpan> {
+    private fun segment(
+        labels: IntArray, chroma: FloatArray, frames: Int, minHops: Int, vocab: Vocabulary,
+    ): List<ChordSpan> {
         val n = labels.size
         if (n == 0) return emptyList()
 
@@ -408,7 +503,7 @@ object ChordDetector {
                 val off = h * CHROMA_BINS
                 for (b in 0 until CHROMA_BINS) mean[b] += chroma[off + b]
             }
-            run.label = classifyVector(mean)
+            run.label = classifyVector(mean, vocab)
         }
 
         // 3. Merge tiny runs into the stronger-matching neighbour, then coalesce equal neighbours.
@@ -454,13 +549,13 @@ object ChordDetector {
             if (run.label == NO_CHORD) continue
             val startFrac = (run.startHop.toLong() * HOP).toFloat() / frames
             val endFrac = if (index == runs.size - 1) 1f else (run.endHop.toLong() * HOP).toFloat() / frames
-            spans.add(ChordSpan(startFrac.coerceIn(0f, 1f), endFrac.coerceIn(0f, 1f), labelToChord(run.label)))
+            spans.add(ChordSpan(startFrac.coerceIn(0f, 1f), endFrac.coerceIn(0f, 1f), labelToChord(run.label, vocab)))
         }
         return spans
     }
 
     /** Classify a raw 12-bin chroma vector — the segment-level version of [classify]. */
-    private fun classifyVector(v: FloatArray): Int = bestLabel(v, 0)
+    private fun classifyVector(v: FloatArray, vocab: Vocabulary): Int = bestLabel(v, 0, vocab)
 
     /**
      * Best-matching chord for the 12 chroma bins of [v] starting at [off]: the template with the
@@ -468,7 +563,7 @@ object ChordDetector {
      * chroma, not its overall level; the seventh templates carry a small negative prior so a triad
      * wins ties. Returns a label in 0 until [CHORD_COUNT].
      */
-    private fun bestLabel(v: FloatArray, off: Int): Int {
+    private fun bestLabel(v: FloatArray, off: Int, vocab: Vocabulary): Int {
         var mean = 0f
         for (b in 0 until CHROMA_BINS) mean += v[off + b]
         mean /= CHROMA_BINS
@@ -479,11 +574,11 @@ object ChordDetector {
         val inv = 1f / sqrt(variance)
         var best = 0
         var bestScore = -Float.MAX_VALUE
-        for (label in 0 until CHORD_COUNT) {
-            val tpl = TEMPLATES[label]
+        for (label in 0 until vocab.count) {
+            val tpl = vocab.templates[label]
             var dot = 0f
             for (b in 0 until CHROMA_BINS) dot += (v[off + b] - mean) * tpl[b]
-            val score = dot * inv + QUALITY_BIAS[label]
+            val score = dot * inv + vocab.bias[label]
             if (score > bestScore) { bestScore = score; best = label }
         }
         return best
@@ -493,18 +588,18 @@ object ChordDetector {
      * Fill [out] (size [CHORD_COUNT]) with the biased Pearson correlation of chroma [v] against each
      * template — the per-beat emission scores for the Viterbi pass, with the seventh prior applied.
      */
-    private fun correlations(v: FloatArray, out: FloatArray) {
+    private fun correlations(v: FloatArray, out: FloatArray, vocab: Vocabulary) {
         var mean = 0f
         for (b in 0 until CHROMA_BINS) mean += v[b]
         mean /= CHROMA_BINS
         var variance = 0f
         for (b in 0 until CHROMA_BINS) { val c = v[b] - mean; variance += c * c }
         val inv = if (variance > 0f) 1f / sqrt(variance) else 0f
-        for (label in 0 until CHORD_COUNT) {
-            val tpl = TEMPLATES[label]
+        for (label in 0 until vocab.count) {
+            val tpl = vocab.templates[label]
             var dot = 0f
             for (b in 0 until CHROMA_BINS) dot += (v[b] - mean) * tpl[b]
-            out[label] = dot * inv + QUALITY_BIAS[label]
+            out[label] = dot * inv + vocab.bias[label]
         }
     }
 
@@ -515,11 +610,11 @@ object ChordDetector {
      * therefore only leaves a chord when the evidence for the next one is strong and sustained —
      * ironing out lone-beat slips and premature switches without a fixed smoothing window.
      */
-    private fun viterbi(emissions: Array<FloatArray>, gated: BooleanArray): IntArray {
+    private fun viterbi(emissions: Array<FloatArray>, gated: BooleanArray, vocab: Vocabulary): IntArray {
         val n = emissions.size
         if (n == 0) return IntArray(0)
-        val noneState = CHORD_COUNT
-        val states = CHORD_COUNT + 1
+        val noneState = vocab.count
+        val states = vocab.count + 1
         val neg = -1e9f
         fun emit(t: Int, s: Int): Float =
             if (gated[t]) { if (s == noneState) 0f else neg } else { if (s == noneState) neg else emissions[t][s] }
