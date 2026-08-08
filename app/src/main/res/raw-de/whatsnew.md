@@ -5,10 +5,10 @@ unverändert angezeigt; kurze Stichpunkte, etwa vier. Die Versionsnummer steht i
 gehört nicht hierher.
 -->
 
-• Der Klick läuft auf Wunsch durch die ganze Schleife weiter, nicht mehr nur beim Einzählen.
-
-• Lautstärke einstellen und zwischen drei Klanghöhen wählen — unter Optionen → Klick, wo vorher „Einzählen“ stand.
-
-• Die Musik weicht unter jedem Klick ein wenig zurück, damit er sich auch in einem lauten Mix durchsetzt.
+• Der Klick läuft auf Wunsch durch die ganze Schleife weiter, nicht mehr nur beim Einzählen — mit eigener Lautstärke und drei Klanghöhen, unter Optionen → Klick.
 
 • Das Einzählen trifft jetzt genau den Schlag, auf dem die Musik einsetzt — auf jedem Gerät.
+
+• Die Akkordspur kann statt Akkorden auch Basstöne benennen: den tiefsten Ton statt der Harmonie darüber. Unter Optionen → Akkorde.
+
+• Der Akkord an der Abspielposition lässt sich während der Wiedergabe groß über der Wellenform anzeigen — lesbar, auch wenn beide Hände beschäftigt sind.

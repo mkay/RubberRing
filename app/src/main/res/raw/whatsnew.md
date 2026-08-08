@@ -9,10 +9,10 @@ what the dialog holds without scrolling. Don't write the version number here; th
 from the build.
 -->
 
-• The click can now carry on through the loop, not only during the count-in.
-
-• Set how loud it is and pick one of three pitches — under Options → Click, which is where the Count-in tab used to be.
-
-• The music ducks a little under each click, so it cuts through a loud mix instead of getting buried in it.
+• The click can carry on through the loop, not only during the count-in — with its own volume and three pitches, under Options → Click.
 
 • The count-in now lands exactly on the beat the audio comes in on, whatever your device.
+
+• The chord lane can name bass notes instead of chords: the lowest note rather than the harmony over it. Options → Chords.
+
+• The chord under the playhead can be shown large across the waveform while you play, readable with both hands busy.
