@@ -224,6 +224,11 @@
     <string name="chords_detect_label">Erkennen</string>
     <string name="chords_detect_chords">Akkorde</string>
     <string name="chords_detect_bass">Basstöne</string>
+    <string name="quality_root">Ton</string>
+    <string name="chords_detect_chords_body">Benennt die Harmonie — für alle, die Akkorde spielen. Zum Übernehmen auf „Neu erkennen“ tippen.</string>
+    <string name="chords_detect_bass_body">Benennt den tiefsten Ton im Mix — für Bass. Über einem C-Akkord mit E darunter steht hier E, wo „Akkorde“ C anzeigt. Zum Übernehmen auf „Neu erkennen“ tippen.</string>
+    <string name="help_bass_title">Dem Bass folgen statt den Akkorden</string>
+    <string name="help_bass_body">Unter Optionen → Akkorde „Erkennen“ auf Basstöne stellen und auf „Neu erkennen“ tippen. Die Spur benennt dann den tiefsten Ton statt des Akkords darüber — also den Ton, den ein Bassist spielt, wenn der Akkord in einer Umkehrung steht.</string>
 
     <string name="countin_intro">Halte Abspielen gedrückt, um mit einem Einzähler zu starten: Klicks im Tempo des Tracks (%1$d BPM), bevor die Wiedergabe beginnt.</string>
     <string name="countin_beats_per_bar">Schläge pro Takt</string>

@@ -99,6 +99,7 @@ private const val KEY_WHATS_NEW_SEEN = "whats_new_seen"
 private const val KEY_CLICK_THROUGH_LOOP = "click_through_loop"
 private const val KEY_CLICK_VOLUME = "click_volume"
 private const val KEY_CLICK_PITCH = "click_pitch"
+private const val KEY_DETECT_MODE = "detect_mode"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
@@ -1123,15 +1124,20 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Discard hand edits for this track and recompute the chords from scratch. */
-    // PROTOTYPE — what the detector listens for. Deliberately NOT persisted and NOT in the backup
-    // format: this exists to be heard on real tracks and then either finished or deleted. Changing
-    // it does nothing until Re-detect is tapped, which is what makes it cheap.
-    private val _detectMode = MutableStateFlow(DetectMode.CHORDS)
+    // What the detector listens for. A global preference, like [showChords]: someone who reads the
+    // lane for basslines reads it that way on every track. It governs *future* analyses only —
+    // switching it deliberately leaves the open track's chords (and any hand edits) alone until
+    // Re-detect is tapped, since re-running would throw those edits away without asking.
+    private val _detectMode = MutableStateFlow(readDetectMode(prefs.getString(KEY_DETECT_MODE, null)))
     val detectMode: StateFlow<DetectMode> = _detectMode.asStateFlow()
 
     fun setDetectMode(mode: DetectMode) {
         _detectMode.value = mode
+        prefs.edit { putString(KEY_DETECT_MODE, mode.name) }
     }
+
+    private fun readDetectMode(name: String?): DetectMode =
+        DetectMode.entries.firstOrNull { it.name == name } ?: DetectMode.CHORDS
 
     fun reDetectChords() {
         val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return

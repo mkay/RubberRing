@@ -1485,6 +1485,10 @@ private fun QuickHelpDialog(onDismiss: () -> Unit) {
                     stringResource(R.string.help_countin_body),
                 )
                 HelpItem(
+                    stringResource(R.string.help_bass_title),
+                    stringResource(R.string.help_bass_body),
+                )
+                HelpItem(
                     stringResource(R.string.help_zoom_title),
                     stringResource(R.string.help_zoom_body),
                 )
@@ -3070,6 +3074,9 @@ private fun ChordPickerDialog(
                         Quality.MIN to R.string.quality_min,
                         Quality.MAJ7 to R.string.quality_maj7,
                         Quality.MIN7 to R.string.quality_min7,
+                        // A bare note, so a mis-heard bass note can be corrected to the right note
+                        // instead of being promoted to a chord it never was.
+                        Quality.ROOT to R.string.quality_root,
                     ).forEach { (q, lbl) ->
                         FilterChip(
                             selected = quality == q,
@@ -3144,8 +3151,6 @@ private fun ChordsTab(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    // PROTOTYPE: pick what to listen for, then tap Re-detect to hear it. Unpersisted on purpose —
-    // see LooperViewModel.setDetectMode.
     Text(stringResource(R.string.chords_detect_label), style = MaterialTheme.typography.labelLarge)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(
@@ -3161,6 +3166,15 @@ private fun ChordsTab(
             )
         }
     }
+    // Says out loud that the chips do nothing on their own — the button below is the other half.
+    Text(
+        stringResource(
+            if (detectMode == DetectMode.BASS) R.string.chords_detect_bass_body
+            else R.string.chords_detect_chords_body,
+        ),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     TextButton(onClick = onReDetect, enabled = showChords && hasChords) {
         Text(stringResource(R.string.chords_redetect))
     }
