@@ -3166,7 +3166,6 @@ private fun ChordsTab(
             )
         }
     }
-    // Says out loud that the chips do nothing on their own — the button below is the other half.
     Text(
         stringResource(
             if (detectMode == DetectMode.BASS) R.string.chords_detect_bass_body
@@ -3174,6 +3173,13 @@ private fun ChordsTab(
         ),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    // Bold, and its own line: the chips do nothing on their own, and someone who misses this
+    // concludes the mode is broken rather than unapplied. One string for both modes.
+    Text(
+        stringResource(R.string.chords_detect_apply),
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.Bold,
     )
     TextButton(onClick = onReDetect, enabled = showChords && hasChords) {
         Text(stringResource(R.string.chords_redetect))

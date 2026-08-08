@@ -304,8 +304,9 @@
     <string name="chords_detect_chords">Chords</string>
     <string name="chords_detect_bass">Bass notes</string>
     <string name="quality_root">Note</string>
-    <string name="chords_detect_chords_body">Names the harmony — for anyone playing chords. Tap Re-detect to apply a change.</string>
-    <string name="chords_detect_bass_body">Names the single note at the bottom of the mix — for bass. Over a C chord with E underneath, this says E where Chords says C. Tap Re-detect to apply a change.</string>
+    <string name="chords_detect_chords_body">Names the harmony — for anyone playing chords.</string>
+    <string name="chords_detect_apply">Tap Re-detect to apply a change.</string>
+    <string name="chords_detect_bass_body">Names the single note at the bottom of the mix — for bass. Over a C chord with E underneath, this says E where Chords says C.</string>
     <string name="help_bass_title">Follow the bass, not the chords</string>
     <string name="help_bass_body">Under Options → Chords, switch Detect to Bass notes and tap Re-detect. The lane then names the lowest note instead of the chord over it — which is the note a bassist is playing when the chord sits on an inversion.</string>
 
