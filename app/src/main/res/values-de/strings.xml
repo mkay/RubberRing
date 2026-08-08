@@ -137,7 +137,7 @@
     <string name="help_playhead_title">Abspielposition verschieben</string>
     <string name="help_playhead_body">Tippe irgendwo in den freien Bereich, um die Abspielposition dorthin zu setzen, oder ziehe nahe der Abspiellinie, um zu scrubben.</string>
     <string name="help_countin_title">Mit Einzähler starten</string>
-    <string name="help_countin_body">Halte Abspielen gedrückt, um vor dem Ton einen Einzähler zu hören; ein normaler Tipp startet sofort. Taktart und Länge stellst du unter Optionen ein.</string>
+    <string name="help_countin_body">Halte Abspielen gedrückt, um vor dem Ton einen Einzähler zu hören; ein normaler Tipp startet sofort. Unter Optionen → Klick stellst du Taktart und Länge ein, lässt den Klick während der Schleife weiterlaufen und wählst Lautstärke und Klanghöhe.</string>
     <string name="help_zoom_title">Zoomen &amp; scrollen</string>
     <string name="help_zoom_body">Ziehe mit zwei Fingern auf, um die Wellenform zu vergrößern oder zu verkleinern. Im gezoomten Zustand ziehst du im freien Bereich zum Scrollen oder nutzt den Übersichtsstreifen unten.</string>
     <string name="help_save_loop_title">Loop speichern</string>
@@ -198,7 +198,15 @@
     <string name="speed_label">Speed %1$s×</string>
     <string name="speed_popup_label">"Speed  %1$s×"</string>
 
-    <string name="options_tab_countin">Einzählen</string>
+    <string name="options_tab_click">Klick</string>
+    <string name="click_through_title">Klick während der Schleife</string>
+    <string name="click_through_body">Klickt auch während der Wiedergabe auf jeden Schlag, nicht nur beim Einzählen.</string>
+    <string name="click_volume_label">Klick-Lautstärke — %1$d %%</string>
+    <string name="click_volume_muted">Stumm. Auch das Einzählen klickt dann nicht.</string>
+    <string name="click_pitch_label">Klanghöhe</string>
+    <string name="click_pitch_low">Tief</string>
+    <string name="click_pitch_mid">Mittel</string>
+    <string name="click_pitch_high">Hoch</string>
     <string name="options_tab_audio">Audio</string>
     <string name="options_tab_chords">Akkorde</string>
 

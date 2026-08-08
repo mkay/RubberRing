@@ -16,10 +16,12 @@ import de.singular.looper.audio.ChordDetector
 import de.singular.looper.audio.ChordEdits
 import de.singular.looper.audio.ChordSpan
 import de.singular.looper.audio.ChordTrack
+import de.singular.looper.audio.ClickGrid
+import de.singular.looper.audio.ClickPitch
+import de.singular.looper.audio.ClickTrack
 import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
-import de.singular.looper.audio.Metronome
 import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.audio.NoteNaming
 import de.singular.looper.audio.Quality
@@ -93,6 +95,9 @@ private const val KEY_EDGE_INSET = "edge_inset"
 private const val KEY_SHOW_CHORDS = "show_chords"
 private const val KEY_GERMAN_NOTES = "german_notes"
 private const val KEY_WHATS_NEW_SEEN = "whats_new_seen"
+private const val KEY_CLICK_THROUGH_LOOP = "click_through_loop"
+private const val KEY_CLICK_VOLUME = "click_volume"
+private const val KEY_CLICK_PITCH = "click_pitch"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
@@ -265,6 +270,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             p.setRegion(audio.fractionToFrame(r.startFrac), audio.fractionToFrame(r.endFrac))
         }
         _playhead.value = r.startFrac
+        applyClick() // the new player knows nothing of the grid until it is told
         if (resume) startPlayback(withCountIn = false)
     }
 
@@ -537,8 +543,6 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private val tapTimes = mutableListOf<Long>()
 
     private var player: LoopPlayer? = null
-    private val metronome by lazy { Metronome() }
-    private var countInJob: Job? = null
     private var loadJob: Job? = null
     private var tickerJob: Job? = null
     private var detectJob: Job? = null
@@ -558,6 +562,11 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 .debounce(350)
                 // Don't persist the transient region changes the arrangement makes as it advances.
                 .collect { (r, g) -> if (_playingStep.value == null) saveLoopState(r, g) }
+        }
+        // Keep the click on the grid the user is looking at: tapping the tempo or nudging the
+        // downbeat moves the clicks with it, mid-playback, with no rebuild.
+        viewModelScope.launch {
+            _grid.collect { applyClick() }
         }
         // When stretched, the region defines what gets stretched — re-run WSOLA once the user
         // settles on new markers (debounced so a drag doesn't thrash the analyser).
@@ -686,9 +695,13 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 player = LoopPlayer(audio.pcm, audio.channels, audio.sampleRate).also {
                     it.setRegion(0, it.frameCount)
                 }
+                click = ClickTrack(audio.sampleRate, _clickPitch.value).also {
+                    it.gain = _clickVolume.value
+                }
                 _state.value = LooperUiState.Loaded(displayName, audio)
                 onLoaded(audio) // may restore a saved normalize mode
                 applyGain()
+                applyClick() // after onLoaded, so it sees the track's restored grid and meter
             },
             onFailure = { _state.value = LooperUiState.Error(it.toErrorMessage()) },
         )
@@ -728,6 +741,96 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             countInBeatsPerBar = ci.beatsPerBar,
             countInBars = ci.bars,
         ).also { persistTrack(it) }
+        applyClick() // the count-in's meter is the pre-roll's meter
+    }
+
+    // ---- Click ----
+
+    // Whether the click carries on through the loop, how loud it is, and how high it sounds.
+    // Global preferences rather than per-track: a player who practises to a click wants it on every
+    // track, and drummers — who asked for this — want the same click every time they pick the phone
+    // up. The count-in's meter and length stay per-track; they describe the song, not the habit.
+
+    private val _clickThroughLoop = MutableStateFlow(prefs.getBoolean(KEY_CLICK_THROUGH_LOOP, false))
+    val clickThroughLoop: StateFlow<Boolean> = _clickThroughLoop.asStateFlow()
+
+    fun setClickThroughLoop(on: Boolean) {
+        _clickThroughLoop.value = on
+        prefs.edit { putBoolean(KEY_CLICK_THROUGH_LOOP, on) }
+        applyClick()
+    }
+
+    private val _clickVolume = MutableStateFlow(
+        prefs.getFloat(KEY_CLICK_VOLUME, ClickTrack.DEFAULT_GAIN).coerceIn(0f, 1f),
+    )
+    val clickVolume: StateFlow<Float> = _clickVolume.asStateFlow()
+
+    /**
+     * Set the click level, 0f..1f. Governs the count-in as well as the through-loop click — one
+     * slider for "how loud is the click", not two that could disagree. At zero there is no click
+     * anywhere, which is the honest reading of a volume slider pulled to the bottom.
+     */
+    fun setClickVolume(value: Float) {
+        val v = value.coerceIn(0f, 1f)
+        _clickVolume.value = v
+        prefs.edit { putFloat(KEY_CLICK_VOLUME, v) }
+        click?.gain = v // live: the feeder reads it on its next chunk
+    }
+
+    private val _clickPitch = MutableStateFlow(readClickPitch(prefs.getString(KEY_CLICK_PITCH, null)))
+    val clickPitch: StateFlow<ClickPitch> = _clickPitch.asStateFlow()
+
+    fun setClickPitch(pitch: ClickPitch) {
+        _clickPitch.value = pitch
+        prefs.edit { putString(KEY_CLICK_PITCH, pitch.name) }
+        click?.pitch = pitch
+    }
+
+    private fun readClickPitch(name: String?): ClickPitch =
+        ClickPitch.entries.firstOrNull { it.name == name } ?: ClickPitch.MID
+
+    // One click engine per loaded track — it bakes the sample rate into its rendered timbres.
+    private var click: ClickTrack? = null
+
+    /**
+     * Hand the player the click and the beat positions to sound it on, or a null grid when the
+     * through-loop click is off. Cheap and idempotent; call it whenever the grid, the region, the
+     * speed, or the click settings move.
+     */
+    private fun applyClick() {
+        val p = player ?: return
+        val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
+        p.setClick(click, if (_clickThroughLoop.value) beatGridInPlayerFrames(audio) else null)
+    }
+
+    /**
+     * Where the track's beats fall in the *player's* frames.
+     *
+     * At 1× the player holds the whole file, so a file frame is a player frame and the grid maps
+     * across untouched. Stretched, it holds only the loop region at a different length, so both the
+     * downbeat's position and the beat spacing scale by the same factor the region did — which is
+     * also why the click follows the slowed tempo rather than the written one, exactly as the
+     * player practising to it expects.
+     */
+    private fun beatGridInPlayerFrames(audio: DecodedAudio): ClickGrid? {
+        val p = player ?: return null
+        val g = _grid.value
+        if (g.bpm <= 0f) return null
+        val framesPerBeat = audio.sampleRate * 60.0 / g.bpm
+        val downbeat = audio.fractionToFrame(g.downbeatFrac).toDouble()
+        // The count-in's beats-per-bar doubles as the track's meter — it is the only place the user
+        // states one, and a track counted in 3 is a track whose accent belongs on every third beat.
+        if (!stretched) {
+            return ClickGrid(downbeat.toLong(), framesPerBeat, _countIn.value.beatsPerBar)
+        }
+        val startF = audio.fractionToFrame(stretchStartFrac)
+        val endF = audio.fractionToFrame(stretchEndFrac).coerceAtLeast(startF + 1)
+        val scale = p.frameCount.toDouble() / (endF - startF)
+        return ClickGrid(
+            firstBeatFrame = ((downbeat - startF) * scale).toLong(),
+            framesPerBeat = framesPerBeat * scale,
+            beatsPerBar = _countIn.value.beatsPerBar,
+        )
     }
 
     // ---- Normalization ----
@@ -1151,33 +1254,34 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         _playhead.value = if (stretched) stretchStartFrac else _region.value.startFrac
         _isPlaying.value = true
         if (withCountIn) {
-            // Sound the count-in first, then start the audio on the following downbeat. A Stop
-            // during the count cancels this job, so p.play() is never reached.
-            countInJob?.cancel()
-            countInJob = viewModelScope.launch {
-                playCountIn()
-                p.play()
-                launchTicker(p)
-            }
+            val (frames, grid) = countInPreRoll()
+            p.play(frames, grid)
         } else {
             p.play()
-            launchTicker(p)
         }
+        launchTicker(p)
     }
 
     /**
-     * Sound the count-in and suspend until it finishes. Cancelling the calling coroutine (e.g. via
-     * Stop) aborts the clicks and propagates, so the caller won't start audio. Counts in at the
-     * tempo the user will actually hear (track BPM × current speed).
+     * The count-in, as frames of click-only pre-roll and the grid to sound them on.
+     *
+     * It is fed through the player's own stream, so the last click and the first sample of audio
+     * are consecutive frames — the join is exact by construction, on any device, whatever its
+     * output latency. (This used to be a second [android.media.AudioTrack] and an 83 ms constant
+     * guessing at the difference between the two tracks' startup latencies.)
+     *
+     * Counts at the tempo the user will actually hear: track BPM × current speed.
      */
-    private suspend fun playCountIn() {
+    private fun countInPreRoll(): Pair<Int, ClickGrid?> {
+        val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return 0 to null
         val ci = _countIn.value
-        _countingIn.value = true
-        try {
-            metronome.countIn(_grid.value.bpm * _speed.value, ci.beatsPerBar, ci.bars)
-        } finally {
-            _countingIn.value = false
-        }
+        val bpm = _grid.value.bpm * _speed.value
+        if (bpm <= 0f) return 0 to null
+        val framesPerBeat = audio.sampleRate * 60.0 / bpm
+        val beats = (ci.beatsPerBar * ci.bars).coerceAtLeast(1)
+        // Exactly `beats` beats long, so it ends on the downbeat the audio comes in on.
+        val frames = Math.round(beats * framesPerBeat).toInt()
+        return frames to ClickGrid(0L, framesPerBeat, ci.beatsPerBar)
     }
 
     /** Drive [_playhead] from the player position until it stops. Used by both play modes. */
@@ -1187,18 +1291,21 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             val frames = p.frameCount.coerceAtLeast(1)
             val span = stretchEndFrac - stretchStartFrac
             while (isActive && p.isPlaying) {
+                // The count-in is part of the stream now, so the player is the one that knows when
+                // it is over. Slightly ahead of what's audible, like the playhead beside it.
+                _countingIn.value = p.countingIn
                 val raw = p.positionFrame.toFloat() / frames
                 // In stretched mode the buffer spans only the region, so map back to a file fraction.
                 _playhead.value = if (stretched) stretchStartFrac + raw * span else raw
                 delay(33)
             }
+            _countingIn.value = false
         }
     }
 
     private fun stopPlayback() {
-        countInJob?.cancel()
-        countInJob = null
-        metronome.stop()
+        // The count-in lives in the player's own stream, so pausing it below silences the clicks
+        // too — there is no second track left to stop.
         _countingIn.value = false
         arrangementJob?.cancel()
         arrangementJob = null
@@ -1229,8 +1336,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
         _isPlaying.value = true
         arrangementJob = viewModelScope.launch {
-            // Count in once, before the first loop only — not before every step.
-            if (withCountIn) playCountIn()
+            // Count in once, before the first loop only — not before every step. It rides on the
+            // first p.play() below as pre-roll, so the count and the first step are one stream.
+            var preRoll = if (withCountIn) countInPreRoll() else 0 to null
             var index = 0
             while (isActive) {
                 val (loop, count) = steps[index]
@@ -1240,7 +1348,11 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 _region.value = LoopRegion(loop.startFrac, loop.endFrac)
                 p.setRegion(startF, endF)
                 p.seekTo(startF)
-                if (!p.isPlaying) { p.play(); launchTicker(p) }
+                if (!p.isPlaying) {
+                    p.play(preRoll.first, preRoll.second)
+                    preRoll = 0 to null // the count-in is spent; later steps start straight away
+                    launchTicker(p)
+                }
                 // Wait until the seek lands inside the new region, then count its full passes.
                 while (isActive && (p.positionFrame < startF || p.positionFrame >= endF)) delay(10)
                 val base = p.completedLoops
@@ -1334,8 +1446,6 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         chordJob?.cancel()
         stretchJob?.cancel()
         arrangementJob?.cancel()
-        countInJob?.cancel()
-        metronome.stop()
         // Best-effort final save so a quit within the debounce window doesn't lose the last edit.
         flushLoopState()
         player?.release()

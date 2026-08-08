@@ -201,6 +201,7 @@ import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.Chord
+import de.singular.looper.audio.ClickPitch
 import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.audio.NoteNaming
 import de.singular.looper.audio.Quality
@@ -1811,6 +1812,9 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val speed by viewModel.speed.collectAsStateWithLifecycle()
     val stretching by viewModel.stretching.collectAsStateWithLifecycle()
     val countIn by viewModel.countIn.collectAsStateWithLifecycle()
+    val clickThroughLoop by viewModel.clickThroughLoop.collectAsStateWithLifecycle()
+    val clickVolume by viewModel.clickVolume.collectAsStateWithLifecycle()
+    val clickPitch by viewModel.clickPitch.collectAsStateWithLifecycle()
     val countingIn by viewModel.countingIn.collectAsStateWithLifecycle()
     val normalize by viewModel.normalize.collectAsStateWithLifecycle()
     val normalizeGainDb by viewModel.normalizeGainDb.collectAsStateWithLifecycle()
@@ -2070,6 +2074,12 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             countIn = countIn,
             bpm = grid.bpm,
             onSetCountIn = viewModel::setCountIn,
+            clickThroughLoop = clickThroughLoop,
+            onSetClickThroughLoop = viewModel::setClickThroughLoop,
+            clickVolume = clickVolume,
+            onSetClickVolume = viewModel::setClickVolume,
+            clickPitch = clickPitch,
+            onSetClickPitch = viewModel::setClickPitch,
             normalize = normalize,
             normalizeGainDb = normalizeGainDb,
             onSetNormalize = viewModel::setNormalize,
@@ -2932,6 +2942,12 @@ private fun OptionsSheet(
     countIn: CountInState,
     bpm: Float,
     onSetCountIn: (beatsPerBar: Int, bars: Int) -> Unit,
+    clickThroughLoop: Boolean,
+    onSetClickThroughLoop: (Boolean) -> Unit,
+    clickVolume: Float,
+    onSetClickVolume: (Float) -> Unit,
+    clickPitch: ClickPitch,
+    onSetClickPitch: (ClickPitch) -> Unit,
     normalize: NormalizeMode,
     normalizeGainDb: Float,
     onSetNormalize: (NormalizeMode) -> Unit,
@@ -2946,7 +2962,7 @@ private fun OptionsSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         var tab by remember { mutableStateOf(0) }
         val tabs = listOf(
-            R.string.options_tab_countin,
+            R.string.options_tab_click,
             R.string.options_tab_audio,
             R.string.options_tab_chords,
         )
@@ -2967,7 +2983,12 @@ private fun OptionsSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             when (tab) {
-                0 -> CountInTab(countIn, bpm, onSetCountIn)
+                0 -> ClickTab(
+                    countIn, bpm, onSetCountIn,
+                    clickThroughLoop, onSetClickThroughLoop,
+                    clickVolume, onSetClickVolume,
+                    clickPitch, onSetClickPitch,
+                )
                 1 -> AudioTab(normalize, normalizeGainDb, onSetNormalize)
                 2 -> ChordsTab(showChords, onSetShowChords, chordEditMode, hasChords, onSetChordEditMode, onReDetectChords)
             }
@@ -3117,13 +3138,79 @@ private fun ChordsTab(
     }
 }
 
-/** Count-in settings: how it's triggered, plus the meter and length pickers. */
+/**
+ * Everything the click does: whether it carries on through the loop, how loud and how high it
+ * sounds, and the meter and length of the count-in that starts it.
+ *
+ * One tab rather than two, because it is one sound. The count-in is per track (it describes the
+ * song's meter); the level, pitch and through-loop switch are global (they describe the player's
+ * habit) — which is why the through-loop switch sits above the divider with them, and the meter
+ * pickers below it.
+ */
 @Composable
-private fun CountInTab(
+private fun ClickTab(
     state: CountInState,
     bpm: Float,
     onSet: (beatsPerBar: Int, bars: Int) -> Unit,
+    throughLoop: Boolean,
+    onSetThroughLoop: (Boolean) -> Unit,
+    volume: Float,
+    onSetVolume: (Float) -> Unit,
+    pitch: ClickPitch,
+    onSetPitch: (ClickPitch) -> Unit,
 ) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.click_through_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(R.string.click_through_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = throughLoop, onCheckedChange = onSetThroughLoop)
+    }
+
+    Text(
+        stringResource(R.string.click_volume_label, (volume * 100).roundToInt()),
+        style = MaterialTheme.typography.labelLarge,
+    )
+    Slider(
+        value = volume,
+        onValueChange = onSetVolume,
+        valueRange = 0f..1f,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    // Says what zero means before the user has to work it out from the silence.
+    if (volume <= 0f) {
+        Text(
+            stringResource(R.string.click_volume_muted),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    Text(stringResource(R.string.click_pitch_label), style = MaterialTheme.typography.labelLarge)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            ClickPitch.LOW to R.string.click_pitch_low,
+            ClickPitch.MID to R.string.click_pitch_mid,
+            ClickPitch.HIGH to R.string.click_pitch_high,
+        ).forEach { (p, label) ->
+            FilterChip(
+                selected = pitch == p,
+                onClick = { onSetPitch(p) },
+                label = { Text(stringResource(label)) },
+                shape = ControlShape,
+            )
+        }
+    }
+
+    HorizontalDivider()
+
     Text(
         stringResource(R.string.countin_intro, bpm.roundToInt()),
         style = MaterialTheme.typography.bodyMedium,

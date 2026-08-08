@@ -187,7 +187,7 @@
     <string name="help_playhead_title">Move the playhead</string>
     <string name="help_playhead_body">Tap anywhere in open space to jump the playhead there, or drag near the playhead line to scrub it.</string>
     <string name="help_countin_title">Start with a count-in</string>
-    <string name="help_countin_body">Long-press Play to hear a count-in before the audio comes in; a normal tap starts straight away. Set its meter and length under Options.</string>
+    <string name="help_countin_body">Long-press Play to hear a count-in before the audio comes in; a normal tap starts straight away. Under Options → Click, set its meter and length, keep the click going through the loop, and pick its volume and pitch.</string>
     <string name="help_zoom_title">Zoom &amp; scroll</string>
     <string name="help_zoom_body">Pinch with two fingers to zoom the waveform in and out. When zoomed in, drag in open space to scroll, or use the minimap strip at the bottom.</string>
     <string name="help_save_loop_title">Save a loop</string>
@@ -268,7 +268,15 @@
 
     <!-- ===== Options sheet ===== -->
 
-    <string name="options_tab_countin">Count-in</string>
+    <string name="options_tab_click">Click</string>
+    <string name="click_through_title">Click through the loop</string>
+    <string name="click_through_body">Keep clicking on the beat while the loop plays, not only during the count-in.</string>
+    <string name="click_volume_label">Click volume — %1$d%%</string>
+    <string name="click_volume_muted">Silent. The count-in won’t click either.</string>
+    <string name="click_pitch_label">Click pitch</string>
+    <string name="click_pitch_low">Low</string>
+    <string name="click_pitch_mid">Medium</string>
+    <string name="click_pitch_high">High</string>
     <string name="options_tab_audio">Audio</string>
     <string name="options_tab_chords">Chords</string>
 
