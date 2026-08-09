@@ -1,0 +1,5 @@
+• The click can keep going through the whole loop, not only during the count-in — with its own volume and a low, medium or high pitch, under Options → Click.
+• The count-in now lands exactly on the beat the audio comes in on, on any device: it plays on the same stream as the track instead of a separate one.
+• The chord lane can name bass notes instead of chords — the lowest note rather than the harmony over it, which is what a bassist plays when the chord sits on an inversion. Options → Chords.
+• The chord under the playhead can be shown in large type across the waveform while you play, readable at arm's length.
+• The Count-in tab is now called Click, since it holds all of the click settings.

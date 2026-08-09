@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.10] - 2026-08-09
+
+### Added
+- The click can carry on through the whole loop, not only during the count-in, with its own volume and a choice of low, medium or high pitch (Options → Click). At zero volume it is silent, and the count-in does not click either.
+- The chord lane can name bass notes instead of chords: the lowest note in the mix rather than the harmony over it. Over a C chord with an E underneath it says E where chord detection says C, which is the note a bassist is playing when the chord sits on an inversion. Options → Chords, then Re-detect to apply.
+- The chord under the playhead can be shown in large type across the waveform while playing, readable at arm's length with both hands on the instrument (Options → Chords).
+
+### Changed
+- The Count-in tab in Options is now called Click, since it holds every click setting rather than only the count-in.
+- The click is loud enough to be heard over a mastered track.
+
+### Fixed
+- The count-in now lands exactly on the beat the audio comes in on. It is mixed into the same output stream as the track rather than played on a stream of its own, so the two can no longer drift apart by a device-dependent amount.
+
 ## [0.9] - 2026-08-04
 
 ### Added
@@ -122,7 +136,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.9...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.10...HEAD
+[0.10]: https://github.com/mkay/RubberRing/compare/v0.9...v0.10
 [0.9]: https://github.com/mkay/RubberRing/compare/v0.8...v0.9
 [0.8]: https://github.com/mkay/RubberRing/compare/v0.7.1...v0.8
 [0.7.1]: https://github.com/mkay/RubberRing/compare/v0.7...v0.7.1
