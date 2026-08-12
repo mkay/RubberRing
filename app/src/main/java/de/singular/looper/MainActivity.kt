@@ -1488,6 +1488,10 @@ private fun QuickHelpDialog(onDismiss: () -> Unit) {
                     stringResource(R.string.help_countin_body),
                 )
                 HelpItem(
+                    stringResource(R.string.help_roots_title),
+                    stringResource(R.string.help_roots_body),
+                )
+                HelpItem(
                     stringResource(R.string.help_bass_title),
                     stringResource(R.string.help_bass_body),
                 )
@@ -3221,6 +3225,7 @@ private fun ChordsTab(
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(
             DetectMode.CHORDS to R.string.chords_detect_chords,
+            DetectMode.ROOTS to R.string.chords_detect_roots,
             DetectMode.BASS to R.string.chords_detect_bass,
         ).forEach { (m, label) ->
             FilterChip(
@@ -3234,8 +3239,11 @@ private fun ChordsTab(
     }
     Text(
         stringResource(
-            if (detectMode == DetectMode.BASS) R.string.chords_detect_bass_body
-            else R.string.chords_detect_chords_body,
+            when (detectMode) {
+                DetectMode.BASS -> R.string.chords_detect_bass_body
+                DetectMode.ROOTS -> R.string.chords_detect_roots_body
+                DetectMode.CHORDS -> R.string.chords_detect_chords_body
+            },
         ),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

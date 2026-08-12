@@ -304,11 +304,15 @@
     <string name="chords_overlay_title">Large chord on the waveform</string>
     <string name="chords_overlay_body">While playing, also show the chord under the playhead in large type across the waveform — readable at arm’s length with both hands busy.</string>
     <string name="chords_detect_chords">Chords</string>
+    <string name="chords_detect_roots">Chord roots</string>
     <string name="chords_detect_bass">Bass notes</string>
     <string name="quality_root">Note</string>
     <string name="chords_detect_chords_body">Names the harmony — for anyone playing chords.</string>
+    <string name="chords_detect_roots_body">The harmony, reduced to one note per chord: it finds the chord and names only its root. Over a C chord with E underneath, this says C where Bass notes says E.</string>
     <string name="chords_detect_apply">Tap Re-detect to apply a change.</string>
     <string name="chords_detect_bass_body">Names the single note at the bottom of the mix — for bass. Over a C chord with E underneath, this says E where Chords says C. Needs a track with an audible bass.</string>
+    <string name="help_roots_title">Chords as single notes</string>
+    <string name="help_roots_body">Under Options → Chords, switch Detect to Chord roots and tap Re-detect. The lane then names each chord\'s root as one note — the harmony simplified, not the bass line. Unlike Bass notes it reads the whole mix, so it does not need an audible bass line.</string>
     <string name="help_bass_title">Follow the bass, not the chords</string>
     <string name="help_bass_body">Under Options → Chords, switch Detect to Bass notes and tap Re-detect. The lane then names the lowest note instead of the chord over it — which is the note a bassist is playing when the chord sits on an inversion. It needs an audible bass to follow.</string>
 

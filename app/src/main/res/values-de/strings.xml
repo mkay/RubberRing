@@ -225,11 +225,15 @@
     <string name="chords_overlay_title">Großer Akkord auf der Wellenform</string>
     <string name="chords_overlay_body">Zeigt den Akkord an der Abspielposition während der Wiedergabe zusätzlich groß über der Wellenform — auch aus Armlänge lesbar, wenn beide Hände beschäftigt sind.</string>
     <string name="chords_detect_chords">Akkorde</string>
+    <string name="chords_detect_roots">Grundtöne</string>
     <string name="chords_detect_bass">Basstöne</string>
     <string name="quality_root">Ton</string>
     <string name="chords_detect_chords_body">Benennt die Harmonie — für alle, die Akkorde spielen.</string>
+    <string name="chords_detect_roots_body">Die Harmonie auf einen Ton pro Akkord reduziert: erkennt den Akkord und benennt nur dessen Grundton. Über einem C-Akkord mit E darunter steht hier C, wo „Basstöne“ E anzeigt.</string>
     <string name="chords_detect_apply">Zum Übernehmen auf „Neu erkennen“ tippen.</string>
     <string name="chords_detect_bass_body">Benennt den tiefsten Ton im Mix — für Bass. Über einem C-Akkord mit E darunter steht hier E, wo „Akkorde“ C anzeigt. Benötigt eine Aufnahme mit hörbarem Bass.</string>
+    <string name="help_roots_title">Akkorde als einzelne Töne</string>
+    <string name="help_roots_body">Unter Optionen → Akkorde „Erkennen“ auf Grundtöne stellen und auf „Neu erkennen“ tippen. Die Spur benennt dann den Grundton jedes Akkords als einzelnen Ton — die vereinfachte Harmonie, nicht die Basslinie. Anders als „Basstöne“ wertet dieser Modus den ganzen Mix aus und benötigt daher keine hörbare Basslinie.</string>
     <string name="help_bass_title">Dem Bass folgen statt den Akkorden</string>
     <string name="help_bass_body">Unter Optionen → Akkorde „Erkennen“ auf Basstöne stellen und auf „Neu erkennen“ tippen. Die Spur benennt dann den tiefsten Ton statt des Akkords darüber — also den Ton, den ein Bassist spielt, wenn der Akkord in einer Umkehrung steht. Benötigt eine hörbare Basslinie.</string>
 

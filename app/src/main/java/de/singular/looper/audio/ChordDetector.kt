@@ -34,8 +34,8 @@ fun rootNames(naming: NoteNaming): Array<String> =
 /**
  * A chord quality. Triads plus the two common sevenths; DOM7/SUS are reserved for a later pass.
  *
- * [ROOT] is not a chord at all — it is a single note, what [DetectMode.BASS] produces. It shares
- * [Chord] so the lane, the edits and the library format need no second type.
+ * [ROOT] is not a chord at all — it is a single note, what [DetectMode.BASS] and [DetectMode.ROOTS]
+ * produce. It shares [Chord] so the lane, the edits and the library format need no second type.
  */
 enum class Quality { MAJ, MIN, MAJ7, MIN7, ROOT, NONE }
 
@@ -47,8 +47,15 @@ enum class Quality { MAJ, MIN, MAJ7, MIN7, ROOT, NONE }
  * a different answer whenever the bass is not on the chord's root: over a C major triad with E at
  * the bottom, [CHORDS] says C and [BASS] says E. Both are correct; which one is useful depends on
  * what you are holding.
+ *
+ * [ROOTS] is the harmony reduced to one note: it detects the chord exactly as [CHORDS] does and
+ * then reports only its root, so the C/E above reads C, not E. The distinction from [BASS] is not
+ * cosmetic — they read different parts of the spectrum, and [ROOTS] never looks below 65 Hz, so it
+ * still answers on a mix whose low end holds nothing but a kick and a voice. It is the right mode
+ * for someone who wants the harmony simplified to single notes rather than the bassist's actual
+ * line; a bassist playing along over inversions wants [BASS].
  */
-enum class DetectMode { CHORDS, BASS }
+enum class DetectMode { CHORDS, ROOTS, BASS }
 
 /** A recognised chord: a root pitch class (0 = C) and a quality. NONE means "no chord / silence". */
 data class Chord(val root: Int, val quality: Quality) {
@@ -239,8 +246,30 @@ object ChordDetector {
         toChord = { label -> Chord(label, Quality.ROOT) },
     )
 
-    private fun vocabularyFor(mode: DetectMode) =
-        if (mode == DetectMode.BASS) BASS_VOCAB else CHORD_VOCAB
+    /**
+     * The root vocabulary: the chord front-end exactly, read back as a bare root note.
+     *
+     * Everything here is [CHORD_VOCAB] — same band, same 48 templates, same FFT — because the
+     * question being answered is still "which chord is this". Only the spelling differs, so a
+     * seventh and its plain triad both collapse to the one note they share. That also means it
+     * inherits chord detection's robustness rather than [BASS_VOCAB]'s: it never reads the bottom
+     * of the spectrum, so a kick and a vocal down there cannot outvote it.
+     */
+    private val ROOT_VOCAB = Vocabulary(
+        count = CHORD_COUNT,
+        templates = TEMPLATES,
+        bias = QUALITY_BIAS,
+        fftSize = FFT_SIZE,
+        minHz = MIN_FREQ_HZ,
+        maxHz = MAX_FREQ_HZ,
+        toChord = { label -> Chord(label / QUALITIES, Quality.ROOT) },
+    )
+
+    private fun vocabularyFor(mode: DetectMode) = when (mode) {
+        DetectMode.BASS -> BASS_VOCAB
+        DetectMode.ROOTS -> ROOT_VOCAB
+        DetectMode.CHORDS -> CHORD_VOCAB
+    }
 
     /** The chord tones (as pitch classes, possibly ≥12) for a template [label]. */
     private fun tonesFor(label: Int): IntArray {

@@ -223,6 +223,40 @@ class ChordDetectorTest {
         assertEquals("plain C major was upgraded to a seventh", Chord(0, Quality.MAJ), dominantChord(result!!))
     }
 
+    /** ROOTS names the chord's root, spelled as a bare note. Same audio, same root, no quality. */
+    @Test fun rootsModeNamesTheChordRoot() {
+        for ((root, quality) in listOf(0 to Quality.MAJ, 9 to Quality.MIN, 5 to Quality.MAJ)) {
+            val result = ChordDetector.detect(triad(root, quality), mode = DetectMode.ROOTS)
+            assertNotNull("detector returned null for root=$root $quality", result)
+            assertEquals(
+                "ROOTS should name root=$root as a bare note",
+                Chord(root, Quality.ROOT), dominantChord(result!!),
+            )
+        }
+    }
+
+    /**
+     * The point of ROOTS over BASS: it runs the *chord* classifier and then drops the quality, so
+     * a seventh collapses onto the same note as its triad rather than being read off the bottom of
+     * the spectrum. Dm7 is the sharp case — CHORDS calls it Dm7, ROOTS must call it plain D.
+     */
+    @Test fun rootsModeCollapsesSeventhOntoItsRoot() {
+        val total = (4.0 * sampleRate).toInt()
+        val pcm = ShortArray(total)
+        renderSeventh(pcm, 0, total, root = 2, quality = Quality.MIN7) // Dm7: D F A C
+        val audio = decoded(pcm)
+        val beat = BeatEstimate(120f, 0f)
+        assertEquals(
+            "chords mode should still name the seventh",
+            Chord(2, Quality.MIN7), dominantChord(ChordDetector.detect(audio, beat)!!),
+        )
+        assertEquals(
+            "roots mode should reduce Dm7 to D",
+            Chord(2, Quality.ROOT),
+            dominantChord(ChordDetector.detect(audio, beat, mode = DetectMode.ROOTS)!!),
+        )
+    }
+
     @Test fun chordNamesReadCorrectly() {
         assertEquals("C", Chord(0, Quality.MAJ).name())
         assertEquals("Am", Chord(9, Quality.MIN).name())
