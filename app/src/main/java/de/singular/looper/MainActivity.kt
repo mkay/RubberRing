@@ -88,7 +88,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -2936,10 +2935,10 @@ private fun BeatControls(
                     label = { Text(stringResource(R.string.chip_tap), maxLines = 1) },
                 )
             }
-            // Tune, not a cog: these are this track's settings, not the app's.
+            // Faders, not a cog: these are this track's settings, not the app's.
             IconButton(onClick = onOptions) {
                 Icon(
-                    Icons.Default.Tune,
+                    painterResource(R.drawable.ic_instant_mix),
                     contentDescription = stringResource(R.string.cd_track_options),
                 )
             }
@@ -3267,8 +3266,19 @@ private fun ChordsTab(
  * One tab rather than two, because it is one sound. The count-in is per track (it describes the
  * song's meter); the level, pitch and through-loop switch are global (they describe the player's
  * habit) — which is why the through-loop switch sits above the divider with them, and the meter
- * pickers below it.
+ * pickers below it. A heading over each half spells that split out, so the two chip rows below the
+ * divider aren't read as applying to the click in general.
  */
+/** Heading for a group of controls inside an Options tab — says what the rows under it apply to. */
+@Composable
+private fun SectionHeading(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
 @Composable
 private fun ClickTab(
     state: CountInState,
@@ -3281,6 +3291,8 @@ private fun ClickTab(
     pitch: ClickPitch,
     onSetPitch: (ClickPitch) -> Unit,
 ) {
+    SectionHeading(stringResource(R.string.click_section_general))
+
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -3332,6 +3344,8 @@ private fun ClickTab(
     }
 
     HorizontalDivider()
+
+    SectionHeading(stringResource(R.string.click_section_countin))
 
     Text(
         stringResource(R.string.countin_intro, bpm.roundToInt()),

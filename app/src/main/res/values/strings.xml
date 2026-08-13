@@ -269,6 +269,9 @@
     <!-- ===== Options sheet ===== -->
 
     <string name="options_tab_click">Click</string>
+    <!-- Section headings inside the Click tab: everything under the second one is count-in only. -->
+    <string name="click_section_general">Click</string>
+    <string name="click_section_countin">Count-in</string>
     <string name="click_through_title">Click through the loop</string>
     <string name="click_through_body">Keep clicking on the beat while the loop plays, not only during the count-in.</string>
     <string name="click_volume_label">Click volume — %1$d%%</string>

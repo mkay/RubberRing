@@ -199,6 +199,8 @@
     <string name="speed_popup_label">"Speed  %1$s×"</string>
 
     <string name="options_tab_click">Klick</string>
+    <string name="click_section_general">Klick</string>
+    <string name="click_section_countin">Einzähler</string>
     <string name="click_through_title">Klick während der Schleife</string>
     <string name="click_through_body">Klickt auch während der Wiedergabe auf jeden Schlag, nicht nur beim Einzählen.</string>
     <string name="click_volume_label">Klick-Lautstärke — %1$d %%</string>

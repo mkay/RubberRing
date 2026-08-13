@@ -1,0 +1,17 @@
+<!--
+  Material Symbols "instant_mix". Same story as ic_queue_music: not in material-icons-extended, so
+  it ships as a drawable, and the path is authored in a 960-unit y-up grid (viewBox "0 -960 960
+  960") that the group translate moves back into Android's y-down viewport.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <!-- Left white: Compose's Icon tints the whole vector to the colour the row asks for. -->
+    <group android:translateY="960">
+        <path
+            android:fillColor="@android:color/white"
+            android:pathData="M200,-160v-280h-80v-80h240v80h-80v280h-80ZM200,-600v-200h80v200h-80ZM360,-600v-80h80v-120h80v120h80v80H360ZM440,-160v-360h80v360h-80ZM680,-160v-120h-80v-80h240v80h-80v120h-80ZM680,-440v-360h80v360h-80Z" />
+    </group>
+</vector>
