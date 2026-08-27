@@ -1,0 +1,3 @@
+• The chord lane can name chord roots: it detects the harmony as usual, then names only the root of each chord. Over a C chord with an E underneath it says C, where Bass notes says E. It reads the whole mix, so it needs no audible bass line. Options → Chords, then Re-detect.
+• The Click tab in Options is split under two headings, Click and Count-in, so it is clear which settings apply to each.
+• Bass notes now says, in the options and the help, that it needs a track with an audible bass.

@@ -9,8 +9,8 @@ what the dialog holds without scrolling. Don't write the version number here; th
 from the build.
 -->
 
-• The click can now carry on through the loop, not only during the count-in — with its own volume slider and three pitches, under Options → Click.
+• The chord lane can name chord roots: the harmony reduced to one note per chord. Over a C chord with an E underneath it says C, where Bass notes says E. Options → Chords, then Re-detect.
 
-• The chord lane can name bass notes instead of chords: the lowest note rather than the harmony over it. Options → Chords.
+• Unlike Bass notes, chord roots read the whole mix, so they work on tracks without an audible bass line.
 
-• The chord under the playhead can be shown in a large tile while you play, readable from a fair distance.
+• The Click tab in Options now has two headings, Click and Count-in, so it is clear which settings apply to each.

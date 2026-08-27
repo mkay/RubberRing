@@ -5,8 +5,8 @@ unverändert angezeigt; kurze Stichpunkte, etwa vier. Die Versionsnummer steht i
 gehört nicht hierher.
 -->
 
-• Der Klick läuft auf Wunsch durch die ganze Schleife weiter, nicht mehr nur beim Einzählen — mit eigenem Lautstärkeregler und drei Klanghöhen, unter Optionen → Klick.
+• Die Akkordspur kann Grundtöne benennen: die Harmonie auf einen Ton pro Akkord reduziert. Über einem C-Akkord mit E darunter steht C, wo „Basstöne“ E anzeigt. Unter Optionen → Akkorde, dann „Neu erkennen“.
 
-• Die Akkordspur kann statt Akkorden auch Basstöne benennen: den tiefsten Ton statt der Harmonie darüber. Unter Optionen → Akkorde.
+• Anders als „Basstöne“ werten Grundtöne den ganzen Mix aus und funktionieren daher auch bei Titeln ohne hörbare Basslinie.
 
-• Der Akkord an der Abspielposition lässt sich während der Wiedergabe in einer großen Kachel anzeigen — lesbar, auch aus einigem Abstand.
+• Der Klick-Reiter in den Optionen ist jetzt in zwei Abschnitte geteilt, Klick und Einzählen, damit klar ist, was wofür gilt.

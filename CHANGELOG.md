@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.11] - 2026-08-27
+
+### Added
+- The chord lane can name chord roots: it detects the harmony as usual, then names only the root of each chord, one note per chord. Over a C chord with an E underneath it says C, where Bass notes says E. It reads the whole mix rather than the bottom of it, so unlike Bass notes it does not need an audible bass line to follow. Options → Chords, then Re-detect to apply.
+
+### Changed
+- The Click tab in Options is split under two headings, Click and Count-in, so it is clear at a glance which settings apply to the count-in alone and which apply to the click throughout the loop.
+- Bass notes now says in the options and in the help that it needs a track with an audible bass, which is the condition under which it gives useful names at all.
+
 ## [0.10] - 2026-08-09
 
 ### Added
@@ -136,7 +145,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.10...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.11...HEAD
+[0.11]: https://github.com/mkay/RubberRing/compare/v0.10...v0.11
 [0.10]: https://github.com/mkay/RubberRing/compare/v0.9...v0.10
 [0.9]: https://github.com/mkay/RubberRing/compare/v0.8...v0.9
 [0.8]: https://github.com/mkay/RubberRing/compare/v0.7.1...v0.8
