@@ -1,0 +1,2 @@
+• Export a saved loop as a WAV file: long-press its chip and choose Export as WAV. The file is the loop as you hear it, at the current speed and cut exactly at its edges.
+• Loops played slower or faster than 1× now come round exactly on time instead of a few milliseconds early, so they no longer stumble at the loop point.

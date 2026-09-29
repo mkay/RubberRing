@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.12] - 2026-09-29
+
+### Added
+- A saved loop can be exported as a WAV file: long-press its chip and choose Export as WAV. The file is the loop as it sounds in the app, at the current speed and with the track's normalization but without the click, cut exactly at the loop's edges so it lands on a DAW's grid. WAV only, since Android has no built-in Vorbis encoder and every DAW reads WAV.
+
+### Fixed
+- Loops played slower or faster than 1× are now exactly as long as they should be. The time-stretch dropped up to one grain at the end, so a loop at 0.8× came round about 30 ms early on every pass and stumbled at the loop point.
+
 ## [0.11] - 2026-08-27
 
 ### Added
@@ -145,7 +153,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.11...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.12...HEAD
+[0.12]: https://github.com/mkay/RubberRing/compare/v0.11...v0.12
 [0.11]: https://github.com/mkay/RubberRing/compare/v0.10...v0.11
 [0.10]: https://github.com/mkay/RubberRing/compare/v0.9...v0.10
 [0.9]: https://github.com/mkay/RubberRing/compare/v0.8...v0.9

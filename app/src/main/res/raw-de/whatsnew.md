@@ -5,8 +5,6 @@ unverändert angezeigt; kurze Stichpunkte, etwa vier. Die Versionsnummer steht i
 gehört nicht hierher.
 -->
 
-• Die Akkordspur kann Grundtöne benennen: die Harmonie auf einen Ton pro Akkord reduziert. Über einem C-Akkord mit E darunter steht C, wo „Basstöne“ E anzeigt. Unter Optionen → Akkorde, dann „Neu erkennen“.
+• Gespeicherte Loops lassen sich als WAV-Datei exportieren: Chip lang drücken, dann „Als WAV exportieren“. Die Datei klingt wie der Loop in der App, im aktuellen Tempo und exakt an seinen Grenzen geschnitten, bereit für eine DAW oder zum Teilen.
 
-• Anders als „Basstöne“ werten Grundtöne den ganzen Mix aus und funktionieren daher auch bei Titeln ohne hörbare Basslinie.
-
-• Der Klick-Reiter in den Optionen ist jetzt in zwei Abschnitte geteilt, Klick und Einzählen, damit klar ist, was wofür gilt.
+• Loops, die langsamer oder schneller als 1× laufen, kommen jetzt exakt im Takt herum. Bisher endeten sie ein paar Millisekunden zu früh und stolperten am Loop-Punkt.

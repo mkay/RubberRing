@@ -12,6 +12,7 @@ Features:
 * Adjustable playback speed — slow a tricky passage down (or speed it up) without changing pitch.
 * Count-in — long-press Play to start after a metronome counts you in at the track's tempo.
 * Saved loops and practice arrangements — capture named sections per track and chain them into a sequence, each repeated as many times as you set.
+* Export a saved loop as a WAV file, at the current speed, for a DAW or to share.
 * Backup & restore — export your whole library to a file and restore it after a reinstall.
 * English and German, with optional German note names (H and B) for chords.
 * Opens audio shared from other apps.
