@@ -41,6 +41,9 @@
     <string name="backup_exported">Bibliothek gesichert</string>
     <string name="backup_restored">Bibliothek wiederhergestellt</string>
     <string name="backup_failed">Sicherung fehlgeschlagen — prüfe die Datei und versuche es noch einmal</string>
+    <string name="loop_exported">Loop exportiert</string>
+    <string name="loop_export_failed">Export fehlgeschlagen — prüfe das Ziel und versuche es noch einmal</string>
+    <string name="action_export_wav">Als WAV exportieren</string>
 
     <string name="restore_confirm_title">Sicherung wiederherstellen?</string>
     <string name="restore_confirm_body">Das ersetzt deine gesamte aktuelle Bibliothek — alle importierten Tracks und gespeicherten Loops — durch den Inhalt der Sicherung. Das lässt sich nicht rückgängig machen.</string>

@@ -27,6 +27,7 @@ import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.audio.NoteNaming
 import de.singular.looper.audio.Quality
 import de.singular.looper.audio.TimeStretch
+import de.singular.looper.audio.WavWriter
 import de.singular.looper.audio.WaveformData
 import de.singular.looper.library.ArrangementStep
 import de.singular.looper.library.LibraryRepository
@@ -856,6 +857,55 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         val gain = Gain.linearFor(_normalize.value, audio.peak, audio.rms)
         _normalizeGainDb.value = Gain.linearToDb(gain)
         player?.setGain(gain, Gain.needsSoftClip(gain, audio.peak))
+    }
+
+    // ---- Loop export ----
+
+    // One-shot result of the last loop export (true = written); the UI toasts it, then clears it.
+    private val _loopExportResult = MutableStateFlow<Boolean?>(null)
+    val loopExportResult: StateFlow<Boolean?> = _loopExportResult.asStateFlow()
+
+    fun consumeLoopExportResult() { _loopExportResult.value = null }
+
+    /** The name to suggest for exporting [loop]: the track, the loop, and the speed unless 1×. */
+    fun loopExportFileName(loop: SavedLoop): String =
+        loopExportName(currentTrack?.name ?: "", loop.label, _speed.value)
+
+    /**
+     * Write [loop] to [uri] as a WAV, the way it sounds: at the current speed and with the track's
+     * normalization, but without the click. The cut is sample-exact at the loop's edges, so a
+     * beat-snapped loop lines up on a DAW's grid as it is.
+     */
+    fun exportLoop(uri: Uri, loop: SavedLoop) {
+        val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
+        val start = loop.startFrac.coerceIn(0f, 1f)
+        val end = loop.endFrac.coerceIn(start, 1f)
+        val speed = _speed.value
+        val mode = _normalize.value
+        viewModelScope.launch {
+            val ok = runCatching {
+                val pcm = withContext(Dispatchers.Default) {
+                    val startF = audio.fractionToFrame(start)
+                    val endF = audio.fractionToFrame(end).coerceAtLeast(startF + 1)
+                    val slice = audio.pcm.copyOfRange(startF * audio.channels, endF * audio.channels)
+                    val timed = if (speed == 1f) slice
+                    else TimeStretch.stretch(slice, audio.channels, audio.sampleRate, speed)
+                    val gain = Gain.linearFor(mode, audio.peak, audio.rms)
+                    if (gain != 1f) {
+                        val softClip = Gain.needsSoftClip(gain, audio.peak)
+                        Gain.applyInto(timed, 0, timed, timed.size, gain, softClip) // in place
+                    }
+                    timed
+                }
+                withContext(Dispatchers.IO) {
+                    val resolver = getApplication<Application>().contentResolver
+                    resolver.openOutputStream(uri)?.buffered()?.use {
+                        WavWriter.write(it, pcm, audio.channels, audio.sampleRate)
+                    } ?: throw IOException("Could not open the destination file")
+                }
+            }.onFailure { if (it is CancellationException) throw it }.isSuccess
+            _loopExportResult.value = ok
+        }
     }
 
     // ---- Named loops ----

@@ -60,6 +60,9 @@
     <string name="backup_exported">Library backed up</string>
     <string name="backup_restored">Library restored</string>
     <string name="backup_failed">Backup failed — check the file and try again</string>
+    <string name="loop_exported">Loop exported</string>
+    <string name="loop_export_failed">Export failed — check the destination and try again</string>
+    <string name="action_export_wav">Export as WAV</string>
 
     <string name="restore_confirm_title">Restore backup?</string>
     <string name="restore_confirm_body">This replaces your entire current library — all imported tracks and saved loops — with the contents of the backup. This can\'t be undone.</string>

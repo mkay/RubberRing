@@ -1854,6 +1854,27 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         Toast.makeText(context, loopLimitMessage, Toast.LENGTH_SHORT).show()
     }
 
+    // Export a saved loop as a WAV wherever the user points. The loop's id is kept saveable so the
+    // result still finds it if the activity is recreated while the system picker is open.
+    var exportLoopId by rememberSaveable { mutableStateOf<String?>(null) }
+    val loopExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("audio/wav"),
+    ) { uri ->
+        val loop = loops.firstOrNull { it.id == exportLoopId }
+        if (uri != null && loop != null) viewModel.exportLoop(uri, loop)
+        exportLoopId = null
+    }
+    val loopExportResult by viewModel.loopExportResult.collectAsStateWithLifecycle()
+    LaunchedEffect(loopExportResult) {
+        val message = when (loopExportResult) {
+            true -> R.string.loop_exported
+            false -> R.string.loop_export_failed
+            null -> return@LaunchedEffect
+        }
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        viewModel.consumeLoopExportResult()
+    }
+
     val intervalFrac = if (grid.bpm > 0f && durationMs > 0)
         ((60_000.0 / grid.bpm / grid.subdivision) / durationMs).toFloat() else 0f
 
@@ -2096,6 +2117,10 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             onSave = viewModel::saveCurrentLoop,
             onRename = viewModel::renameLoop,
             onDelete = viewModel::deleteLoop,
+            onExport = { loop ->
+                exportLoopId = loop.id
+                loopExportLauncher.launch(viewModel.loopExportFileName(loop))
+            },
             onReorder = viewModel::reorderLoops,
         )
 
@@ -2179,6 +2204,7 @@ private fun LoopChips(
     onSave: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onExport: (SavedLoop) -> Unit,
     onReorder: (List<String>) -> Unit,
 ) {
     var showSaveDialog by remember { mutableStateOf(false) }
@@ -2397,6 +2423,7 @@ private fun LoopChips(
                     onApply = { onApply(loop) },
                     onRename = { renameTarget = loop },
                     onDelete = { onDelete(loop.id) },
+                    onExport = { onExport(loop) },
                 )
                 }
             }
@@ -2652,6 +2679,7 @@ private fun LoopChip(
     onApply: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onExport: () -> Unit,
     dragging: Boolean = false,
     dragOffset: Float = 0f,
     onDragStart: () -> Unit = {},
@@ -2736,6 +2764,10 @@ private fun LoopChip(
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.action_delete)) },
                 onClick = { menu = false; onDelete() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.action_export_wav)) },
+                onClick = { menu = false; onExport() },
             )
         }
     }
