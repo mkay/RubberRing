@@ -42,7 +42,24 @@ object TimeStretch {
         val delta = (sampleRate * SEARCH_SECONDS).roundToInt().coerceAtLeast(1)
         if (frames < seg + delta + 2 || hop < 1) return pcm
 
-        val analysisHop = max(1, (hop * speed).roundToInt()) // Ha = Hs * speed
+        // The output is exactly frames / speed long, so a loop keeps its length at any speed: a
+        // loop that comes round even a few ms early stumbles at the seam on every pass. It is
+        // built as the first grain's leading half, [grains] whole grains, and an [ending] taken
+        // straight from the end of the input — so the output ends on the input's last sample,
+        // just as it starts on its first, and the seam joins exactly what the original joins.
+        val outFrames = (frames / speed.toDouble()).roundToInt()
+        // hop <= ending < 2 * hop: long enough to carry the closing cross-fade and still fit.
+        val grains = (outFrames - 2 * hop) / hop
+        if (grains < 1) return pcm
+        val ending = outFrames - (grains + 1) * hop
+        val endStart = frames - ending // where the ending is read from the input
+        if (endStart < hop) return pcm // a loop of a few dozen ms: nothing to stretch it with
+
+        // Nominal grain positions, spaced so the last grain's natural continuation lands exactly on
+        // [endStart]. Because the ending plays at 1×, the step is a hair off hop * speed, which is
+        // inaudible; computing each from its index keeps rounding from drifting.
+        val analysisStep = (endStart - hop).toDouble() / grains
+        val nominal = IntArray(grains + 1) { (it * analysisStep).roundToInt() }
 
         // Periodic Hann so two 50%-overlapped windows sum to exactly 1 (constant-overlap-add).
         val hann = FloatArray(seg) { (0.5 - 0.5 * cos(2.0 * PI * it / seg)).toFloat() }
@@ -58,7 +75,7 @@ object TimeStretch {
             }
         }
 
-        val out = ShortArray(((frames / speed).toInt() + 3 * seg) * channels)
+        val out = ShortArray(outFrames * channels)
         var outSample = 0
         val tail = FloatArray(hop * channels) // windowed second half of the previous grain
 
@@ -80,22 +97,41 @@ object TimeStretch {
             }
         }
 
-        emitGrain(0, rawFirstHalf = true)
-        var natPos = hop // where this grain naturally continues — the target the next grain matches
-        var lastP = 0
-        var ia = analysisHop
-        while (ia + seg < frames) {
-            val p = (ia + bestOffset(mono, ia, natPos, hop, delta, frames, seg)).coerceIn(0, frames - seg)
-            emitGrain(p, rawFirstHalf = false)
-            lastP = p
-            natPos = p + hop
-            ia += analysisHop
+        // Fixing both edges costs one join that the similarity search can't choose freely: the
+        // search's jumps must add up to exactly the length it has to make up, so whatever phase
+        // is left over lands somewhere. The chain is therefore built twice — forward from the
+        // start and backward from the ending, each grain matched to its neighbour — and the two
+        // meet at whichever grain boundary has the least audible error, such as a quiet gap or a
+        // spot where the waveforms already line up. On a sustained tone it would otherwise be a
+        // dip at the seam.
+        fun searchRange(ia: Int) = max(-delta, -ia)..min(delta, frames - seg - ia)
+        val fwd = IntArray(grains + 1) // fwd[0] = 0: the loop starts on its own first sample
+        for (k in 1..grains) {
+            val ia = nominal[k]
+            fwd[k] = ia + bestOffset(mono, ia, fwd[k - 1] + hop, hop, searchRange(ia))
         }
+        // bwd[k] is grain k chosen so its continuation matches the start of grain k + 1; the
+        // ending acts as grain grains + 1, read from [endStart].
+        val bwd = IntArray(grains + 2)
+        bwd[grains + 1] = endStart
+        for (k in grains downTo 1) {
+            val ia = nominal[k]
+            bwd[k] = ia + bestOffset(mono, ia + hop, bwd[k + 1], hop, searchRange(ia))
+        }
+        // Join at k: forward grains before it, backward grains from it on.
+        val meet = (1..grains + 1).minBy { k -> mismatch(mono, fwd[k - 1] + hop, bwd[k], hop) }
 
-        // End at full amplitude (no fade-out): write the last grain's second half raw, since there
-        // is no successor grain to cross-fade it against.
+        emitGrain(0, rawFirstHalf = true)
+        for (k in 1..grains) emitGrain(if (k < meet) fwd[k] else bwd[k], rawFirstHalf = false)
+
+        // Cross-fade the last grain's tail into the ending, then play the ending out raw — no
+        // fade-out, the loop's end edge stays at full amplitude.
         for (f in 0 until hop) {
-            val src = (lastP + hop + f) * channels
+            val src = (endStart + f) * channels
+            for (c in 0 until channels) writeSample(tail[f * channels + c] + pcm[src + c] * hann[f])
+        }
+        for (f in endStart + hop until frames) {
+            val src = f * channels
             for (c in 0 until channels) writeSample(pcm[src + c].toFloat())
         }
 
@@ -103,40 +139,42 @@ object TimeStretch {
     }
 
     /**
-     * Within ±[delta] frames of [ia], find the offset whose [len]-frame window best matches the
-     * natural continuation at [natPos] (normalised cross-correlation on the mono signal). This
-     * phase-aligns the next grain to the previously emitted output.
+     * The offset within [range] whose [len]-frame window at [base] + offset best matches the
+     * window at [target] (normalised cross-correlation on the mono signal). Forward, [target] is
+     * the previous grain's natural continuation; backward, [base] is a grain's continuation and
+     * [target] the next grain. Either way it phase-aligns neighbouring grains.
      */
-    private fun bestOffset(
-        mono: FloatArray,
-        ia: Int,
-        natPos: Int,
-        len: Int,
-        delta: Int,
-        frames: Int,
-        seg: Int,
-    ): Int {
-        val kLo = max(-delta, -ia)
-        val kHi = min(delta, frames - seg - ia)
+    private fun bestOffset(mono: FloatArray, base: Int, target: Int, len: Int, range: IntRange): Int {
         var bestK = 0
         var bestScore = Float.NEGATIVE_INFINITY
-        var k = kLo
-        while (k <= kHi) {
-            val base = ia + k
+        for (k in range) {
+            val from = base + k
             var dot = 0f
             var energy = 0f
             var j = 0
             while (j < len) {
-                val a = mono[base + j]
-                dot += a * mono[natPos + j]
+                val a = mono[from + j]
+                dot += a * mono[target + j]
                 energy += a * a
                 j++
             }
             val score = dot / sqrt(energy + 1e-3f)
             if (score > bestScore) { bestScore = score; bestK = k }
-            k++
         }
         return bestK
+    }
+
+    /**
+     * How audibly two [len]-frame windows differ: the energy of their difference. Unlike the
+     * search's correlation it is absolute, so a join in a quiet passage counts as nearly free.
+     */
+    private fun mismatch(mono: FloatArray, a: Int, b: Int, len: Int): Float {
+        var sum = 0f
+        for (j in 0 until len) {
+            val d = mono[a + j] - mono[b + j]
+            sum += d * d
+        }
+        return sum
     }
 
     private fun clampToShort(v: Float): Short {
