@@ -1888,6 +1888,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         // composes; read it once to seed the waveform, which owns pan/zoom during the session and
         // mirrors changes back via onViewportChange.
         val initialViewport = remember(audio) { viewModel.viewport.value }
+        val zoomOutRequests by viewModel.zoomOutRequests.collectAsStateWithLifecycle()
 
         // Long-pressing a marker is the one gesture nothing on screen can show, so the hint rides
         // along with every track that's opened. It fades on its own — never something to dismiss —
@@ -1947,6 +1948,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
                 },
                 initialZoom = initialViewport.zoom,
                 initialOffset = initialViewport.offset,
+                zoomOutRequests = zoomOutRequests,
                 gain = Gain.dbToLinear(normalizeGainDb),
                 onViewportChange = viewModel::setViewport,
                 onStartChange = viewModel::setStart,
@@ -2114,6 +2116,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             onLocked = notifyLocked,
             onArrange = { showArrange = true },
             onApply = viewModel::applySavedLoop,
+            onReset = viewModel::resetRegion,
             onSave = viewModel::saveCurrentLoop,
             onRename = viewModel::renameLoop,
             onDelete = viewModel::deleteLoop,
@@ -2201,6 +2204,7 @@ private fun LoopChips(
     onLocked: () -> Unit,
     onArrange: () -> Unit,
     onApply: (SavedLoop) -> Unit,
+    onReset: () -> Unit,
     onSave: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
@@ -2420,7 +2424,9 @@ private fun LoopChips(
                         chipBounds[loop.id] = x..(x + it.size.width)
                     },
                     onLocked = onLocked,
-                    onApply = { onApply(loop) },
+                    // Tapping the loop already showing clears the markers back to the whole
+                    // track, so a new loop needn't start from an old one's bounds.
+                    onApply = { if (loop.id == selectedId) onReset() else onApply(loop) },
                     onRename = { renameTarget = loop },
                     onDelete = { onDelete(loop.id) },
                     onExport = { onExport(loop) },

@@ -24,7 +24,9 @@ import kotlin.math.sqrt
  * tones stay clean.
  *
  * [speed] < 1 slows down (longer output); > 1 speeds up. [speed] == 1 returns the input as-is.
- * Pure CPU work — call it off the main thread.
+ * Pure CPU work — call it off the main thread. A whole song takes long enough that the caller may
+ * want to give up part-way: [checkCancelled] runs once per grain of the search and may throw to
+ * abandon the stretch.
  */
 object TimeStretch {
 
@@ -33,7 +35,19 @@ object TimeStretch {
     private const val GRAIN_SECONDS = 0.046f
     private const val SEARCH_SECONDS = 0.015f
 
-    fun stretch(pcm: ShortArray, channels: Int, sampleRate: Int, speed: Float): ShortArray {
+    // The search runs coarse-then-fine: every candidate offset is scored on a copy of the signal
+    // averaged down by this factor, and only the neighbourhood of the winner is scored at full
+    // resolution. That is about DECIMATION² less work — what makes stretching a whole song take
+    // seconds rather than minutes — and the fine pass still places the grain to the sample.
+    private const val DECIMATION = 4
+
+    fun stretch(
+        pcm: ShortArray,
+        channels: Int,
+        sampleRate: Int,
+        speed: Float,
+        checkCancelled: () -> Unit = {},
+    ): ShortArray {
         if (speed == 1f || channels < 1 || pcm.size < channels * 4) return pcm
         val frames = pcm.size / channels
 
@@ -74,6 +88,31 @@ object TimeStretch {
                 mono[f] = s.toFloat() / channels
             }
         }
+        // The same, averaged over each DECIMATION frames: the averaging is a crude low-pass, so
+        // the coarse pass compares the waveform's shape rather than aliased treble.
+        val coarse = FloatArray(frames / DECIMATION) { i ->
+            var s = 0f
+            for (j in 0 until DECIMATION) s += mono[i * DECIMATION + j]
+            s / DECIMATION
+        }
+
+        // Find the coarse winner, then rescore the offsets around it at full resolution. The
+        // neighbourhood spans a whole coarse step either side, which absorbs the rounding of
+        // positions down to coarse indices.
+        fun search(base: Int, target: Int, range: IntRange): Int {
+            val step = DECIMATION
+            val len = hop / step
+            var bestK = 0
+            var bestScore = Float.NEGATIVE_INFINITY
+            var k = range.first
+            while (k <= range.last) {
+                val score = similarity(coarse, (base + k) / step, target / step, len)
+                if (score > bestScore) { bestScore = score; bestK = k }
+                k += step
+            }
+            val fine = max(range.first, bestK - step)..min(range.last, bestK + step)
+            return bestOffset(mono, base, target, hop, fine)
+        }
 
         val out = ShortArray(outFrames * channels)
         var outSample = 0
@@ -107,16 +146,18 @@ object TimeStretch {
         fun searchRange(ia: Int) = max(-delta, -ia)..min(delta, frames - seg - ia)
         val fwd = IntArray(grains + 1) // fwd[0] = 0: the loop starts on its own first sample
         for (k in 1..grains) {
+            checkCancelled()
             val ia = nominal[k]
-            fwd[k] = ia + bestOffset(mono, ia, fwd[k - 1] + hop, hop, searchRange(ia))
+            fwd[k] = ia + search(ia, fwd[k - 1] + hop, searchRange(ia))
         }
         // bwd[k] is grain k chosen so its continuation matches the start of grain k + 1; the
         // ending acts as grain grains + 1, read from [endStart].
         val bwd = IntArray(grains + 2)
         bwd[grains + 1] = endStart
         for (k in grains downTo 1) {
+            checkCancelled()
             val ia = nominal[k]
-            bwd[k] = ia + bestOffset(mono, ia + hop, bwd[k + 1], hop, searchRange(ia))
+            bwd[k] = ia + search(ia + hop, bwd[k + 1], searchRange(ia))
         }
         // Join at k: forward grains before it, backward grains from it on.
         val meet = (1..grains + 1).minBy { k -> mismatch(mono, fwd[k - 1] + hop, bwd[k], hop) }
@@ -148,20 +189,24 @@ object TimeStretch {
         var bestK = 0
         var bestScore = Float.NEGATIVE_INFINITY
         for (k in range) {
-            val from = base + k
-            var dot = 0f
-            var energy = 0f
-            var j = 0
-            while (j < len) {
-                val a = mono[from + j]
-                dot += a * mono[target + j]
-                energy += a * a
-                j++
-            }
-            val score = dot / sqrt(energy + 1e-3f)
+            val score = similarity(mono, base + k, target, len)
             if (score > bestScore) { bestScore = score; bestK = k }
         }
         return bestK
+    }
+
+    /** How well the [len]-frame window at [from] continues the one at [target] (see [bestOffset]). */
+    private fun similarity(signal: FloatArray, from: Int, target: Int, len: Int): Float {
+        var dot = 0f
+        var energy = 0f
+        var j = 0
+        while (j < len) {
+            val a = signal[from + j]
+            dot += a * signal[target + j]
+            energy += a * a
+            j++
+        }
+        return dot / sqrt(energy + 1e-3f)
     }
 
     /**

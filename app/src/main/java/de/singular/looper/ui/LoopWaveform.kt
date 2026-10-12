@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -158,6 +159,7 @@ fun LoopWaveform(
     noteNaming: NoteNaming, // how the chord lane spells its roots (B vs the German H)
     initialZoom: Float,
     initialOffset: Float,
+    zoomOutRequests: Int, // each increase zooms the view out to the whole file
     gain: Float, // playback gain from normalization (1f = none); drawn so the boost is visible
     onViewportChange: (zoom: Float, offset: Float) -> Unit,
     onStartChange: (Float) -> Unit,
@@ -199,6 +201,17 @@ fun LoopWaveform(
     // Viewport state, seeded from the caller and reset when a new file is loaded.
     var zoom by remember(waveform) { mutableFloatStateOf(initialZoom) }
     var offset by remember(waveform) { mutableFloatStateOf(initialOffset) }
+
+    // Only a request made after this file opened counts: the count outlives the file, and acting on
+    // it at first composition would throw away a restored viewport.
+    var zoomOutsSeen by remember(waveform) { mutableIntStateOf(zoomOutRequests) }
+    LaunchedEffect(zoomOutRequests) {
+        if (zoomOutRequests != zoomOutsSeen) {
+            zoomOutsSeen = zoomOutRequests
+            zoom = 1f
+            offset = 0f
+        }
+    }
 
     // Mirror every viewport change up to the caller so it can be persisted (saved on exit).
     val reportViewport by rememberUpdatedState(onViewportChange)

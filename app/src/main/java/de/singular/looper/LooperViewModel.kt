@@ -39,6 +39,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -242,11 +243,12 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             val endF = audio.fractionToFrame(r.endFrac).coerceAtLeast(startF + 1)
             val buffer = withContext(Dispatchers.Default) {
                 val slice = audio.pcm.copyOfRange(startF * audio.channels, endF * audio.channels)
-                TimeStretch.stretch(slice, audio.channels, audio.sampleRate, s)
+                // Superseded by a newer speed or region, a stretch stops rather than running on to
+                // the end: a whole song takes seconds, and each one left running holds its buffers,
+                // so a few taps in a row used to stack them up until the heap ran out.
+                TimeStretch.stretch(slice, audio.channels, audio.sampleRate, s) { ensureActive() }
             }
             if (!isActive) return@launch // a newer speed/region change superseded this one
-            stretchStartFrac = r.startFrac
-            stretchEndFrac = r.endFrac
             swapPlayer(buffer, audio.channels, audio.sampleRate, isStretched = true, r, audio, wasPlaying)
             _stretching.value = false
         }
@@ -262,6 +264,14 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         audio: DecodedAudio,
         resume: Boolean,
     ) {
+        // Where in the song the old player has got to, read before it goes and before the stretch
+        // mapping changes. The new player carries on from there if the new region holds it, so a
+        // stretched loop that is widened plays on past its old end, just as it does at 1×, rather
+        // than starting over once the new buffer is ready.
+        val carryOn = player?.let { old ->
+            val raw = old.positionFrame.toFloat() / old.frameCount.coerceAtLeast(1)
+            if (stretched) stretchStartFrac + raw * (stretchEndFrac - stretchStartFrac) else raw
+        }?.takeIf { it >= r.startFrac && it < r.endFrac }
         stopPlayback()
         player?.release()
         stretched = isStretched
@@ -269,13 +279,22 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         player = p
         applyGain() // the new player starts at 1×; carry the track's normalization over
         if (isStretched) {
+            stretchStartFrac = r.startFrac
+            stretchEndFrac = r.endFrac
             p.setRegion(0, p.frameCount) // the whole stretched buffer *is* the loop
         } else {
             p.setRegion(audio.fractionToFrame(r.startFrac), audio.fractionToFrame(r.endFrac))
         }
-        _playhead.value = r.startFrac
+        if (carryOn != null) {
+            val span = (r.endFrac - r.startFrac).coerceAtLeast(1e-6f)
+            p.seekTo(
+                if (isStretched) (((carryOn - r.startFrac) / span) * p.frameCount).toInt()
+                else audio.fractionToFrame(carryOn)
+            )
+        }
+        _playhead.value = carryOn ?: r.startFrac
         applyClick() // the new player knows nothing of the grid until it is told
-        if (resume) startPlayback(withCountIn = false)
+        if (resume) startPlayback(withCountIn = false, fromStart = carryOn == null)
     }
 
     private val library = LibraryRepository(app)
@@ -949,8 +968,27 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         val start = loop.startFrac.coerceIn(0f, 1f)
         val end = loop.endFrac.coerceIn(start, 1f)
         _region.value = LoopRegion(start, end)
-        player?.setRegion(audio.fractionToFrame(start), audio.fractionToFrame(end))
+        // When stretched the player holds only the old region, so file frames don't address it; the
+        // debounced rebuild picks the new region up, as for a marker drag.
+        if (!stretched) player?.setRegion(audio.fractionToFrame(start), audio.fractionToFrame(end))
         _playhead.value = start
+    }
+
+    // Bumped to ask the waveform, which owns pan/zoom, to zoom out to the whole file.
+    private val _zoomOutRequests = MutableStateFlow(0)
+    val zoomOutRequests: StateFlow<Int> = _zoomOutRequests.asStateFlow()
+
+    /**
+     * Put the markers back at the very start and end of the file and zoom out, so a new loop can be
+     * marked from scratch rather than from an existing loop's bounds. The grid is left alone: it
+     * describes the song, and the next loop wants it as much as the last one did.
+     */
+    fun resetRegion() {
+        val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
+        _region.value = LoopRegion(0f, 1f)
+        // When stretched, the debounced rebuild picks the new region up, as for a marker drag.
+        if (!stretched) player?.setRegion(0, audio.frameCount)
+        _zoomOutRequests.value++
     }
 
     fun renameLoop(id: String, label: String) {
@@ -1324,14 +1362,17 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun startPlayback(withCountIn: Boolean) {
+    private fun startPlayback(withCountIn: Boolean, fromStart: Boolean = true) {
         val p = player ?: return
         // A plain play cancels any running arrangement and loops the single current region.
         arrangementJob?.cancel()
         _playingStep.value = null
-        // Playback always begins at the start marker.
-        p.rewind()
-        _playhead.value = if (stretched) stretchStartFrac else _region.value.startFrac
+        // Play begins at the start marker. Resuming onto a rebuilt player is the exception: it
+        // carries on from where the old one had got to (see [swapPlayer]).
+        if (fromStart) {
+            p.rewind()
+            _playhead.value = if (stretched) stretchStartFrac else _region.value.startFrac
+        }
         _isPlaying.value = true
         if (withCountIn) {
             val (frames, grid) = countInPreRoll()
