@@ -9,6 +9,8 @@ what the dialog holds without scrolling. Don't write the version number here; th
 from the build.
 -->
 
-• Export a saved loop as a WAV file: long-press its chip and choose Export as WAV. You get the loop as you hear it, at the current speed and cut exactly at its edges, ready for a DAW or to share.
+• Loop chips now toggle: tap the highlighted chip to switch its loop off. The markers return to the whole track and the waveform zooms out. Tap the chip again to bring the loop back.
 
-• Loops played slower or faster than 1× now come round exactly on time. They used to end a few milliseconds early and stumble at the loop point.
+• Slowing down a whole song now takes seconds instead of minutes.
+
+• Fixed a crash when switching loops while playing slower or faster than 1×. Changing speed or loop during playback now carries on from where it was instead of jumping back to the start.

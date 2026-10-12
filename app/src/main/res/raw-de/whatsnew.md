@@ -5,6 +5,8 @@ unverändert angezeigt; kurze Stichpunkte, etwa vier. Die Versionsnummer steht i
 gehört nicht hierher.
 -->
 
-• Gespeicherte Loops lassen sich als WAV-Datei exportieren: Chip lang drücken, dann „Als WAV exportieren“. Die Datei klingt wie der Loop in der App, im aktuellen Tempo und exakt an seinen Grenzen geschnitten, bereit für eine DAW oder zum Teilen.
+• Loop-Chips schalten jetzt um: Den hervorgehobenen Chip antippen schaltet seinen Loop aus. Die Marker umfassen wieder den ganzen Titel, und die Wellenform zoomt heraus. Erneut tippen holt den Loop zurück.
 
-• Loops, die langsamer oder schneller als 1× laufen, kommen jetzt exakt im Takt herum. Bisher endeten sie ein paar Millisekunden zu früh und stolperten am Loop-Punkt.
+• Einen ganzen Titel zu verlangsamen dauert jetzt Sekunden statt Minuten.
+
+• Absturz behoben beim Wechseln von Loops, während langsamer oder schneller als 1× gespielt wird. Tempo- oder Loop-Wechsel während der Wiedergabe spielen jetzt an der aktuellen Stelle weiter, statt zum Anfang zu springen.

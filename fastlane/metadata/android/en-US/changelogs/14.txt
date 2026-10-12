@@ -1,0 +1,2 @@
+• Loop chips now toggle: tap the highlighted chip to switch its loop off and return to the whole track. Tap it again to bring the loop back.
+• Slowed-down or sped-up playback: fixed a crash when switching loops, whole songs now stretch in seconds instead of minutes, and changes no longer jump back to the loop start.

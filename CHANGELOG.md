@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.13] - 2026-10-12
+
+### Added
+- Loop chips toggle: tapping the highlighted chip switches its loop off, returning the markers to the very start and end of the track and zooming the waveform out. The beat grid is kept. Tap the chip again to bring the loop back.
+
+### Fixed
+- Tapping a saved loop while playing slower or faster than 1× could crash the app when the loop started later in the song than the current one ended.
+- Slowing down a whole song (a full-length loop at a speed other than 1×) took minutes, and changing the loop meanwhile could run the app out of memory. The time-stretch search is now about 13× faster, and a stretch that has been superseded is cancelled.
+- At speeds other than 1×, changing the speed or the loop while playing no longer jumps back to the loop start once the new audio is ready; it carries on from where it was, as it does at 1×.
+
 ## [0.12] - 2026-09-29
 
 ### Added
@@ -153,7 +163,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.12...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.13...HEAD
+[0.13]: https://github.com/mkay/RubberRing/compare/v0.12...v0.13
 [0.12]: https://github.com/mkay/RubberRing/compare/v0.11...v0.12
 [0.11]: https://github.com/mkay/RubberRing/compare/v0.10...v0.11
 [0.10]: https://github.com/mkay/RubberRing/compare/v0.9...v0.10
