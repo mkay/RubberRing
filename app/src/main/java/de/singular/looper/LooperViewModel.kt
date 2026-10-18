@@ -25,6 +25,8 @@ import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.audio.NoteNaming
+import de.singular.looper.audio.PcmRegion
+import de.singular.looper.audio.PcmSource
 import de.singular.looper.audio.Quality
 import de.singular.looper.audio.TimeStretch
 import de.singular.looper.audio.WavWriter
@@ -220,9 +222,10 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * (Re)build the playback buffer for the current speed + region. At 1× the player loops the
-     * original full-file PCM; otherwise it loops a WSOLA-stretched copy of just the loop region
-     * (offline, so quality doesn't fight a real-time deadline). Resumes playback if it was on.
+     * (Re)build the player for the current speed + region. At 1× it loops the original full-file
+     * PCM; otherwise a WSOLA stretch of just the loop region, worked out ahead of playback so
+     * quality doesn't fight a real-time deadline. The current player plays on until the new one is
+     * ready, which then resumes if it was on.
      */
     private fun rebuildPlayback() {
         val audio = (state.value as? LooperUiState.Loaded)?.audio ?: return
@@ -233,7 +236,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
         if (s == 1f) {
             _stretching.value = false
-            swapPlayer(audio.pcm, audio.channels, audio.sampleRate, isStretched = false, r, audio, wasPlaying)
+            swapPlayer(PcmRegion(audio.pcm, audio.channels), isStretched = false, r, audio, wasPlaying)
             return
         }
 
@@ -241,24 +244,27 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         stretchJob = viewModelScope.launch {
             val startF = audio.fractionToFrame(r.startFrac)
             val endF = audio.fractionToFrame(r.endFrac).coerceAtLeast(startF + 1)
-            val buffer = withContext(Dispatchers.Default) {
-                val slice = audio.pcm.copyOfRange(startF * audio.channels, endF * audio.channels)
+            val source = withContext(Dispatchers.Default) {
                 // Superseded by a newer speed or region, a stretch stops rather than running on to
-                // the end: a whole song takes seconds, and each one left running holds its buffers,
-                // so a few taps in a row used to stack them up until the heap ran out.
-                TimeStretch.stretch(slice, audio.channels, audio.sampleRate, s) { ensureActive() }
+                // the end: a whole song takes seconds, and there is no point finishing one that
+                // will never play.
+                TimeStretch.plan(
+                    audio.pcm, audio.channels, audio.sampleRate, s, startF, endF,
+                ) { ensureActive() }
             }
             if (!isActive) return@launch // a newer speed/region change superseded this one
-            swapPlayer(buffer, audio.channels, audio.sampleRate, isStretched = true, r, audio, wasPlaying)
+            // Read now, not at launch: the user may have paused or played during the stretch.
+            swapPlayer(source, isStretched = true, r, audio, _isPlaying.value)
             _stretching.value = false
         }
     }
 
-    /** Replace the player with one over [pcm], restore the loop region, and optionally resume. */
+    /**
+     * Replace the player with one over [source], restore the loop region, and optionally resume.
+     * The old player is released before the new one is made, so the two are never alive at once.
+     */
     private fun swapPlayer(
-        pcm: ShortArray,
-        channels: Int,
-        sampleRate: Int,
+        source: PcmSource,
         isStretched: Boolean,
         r: LoopRegion,
         audio: DecodedAudio,
@@ -275,7 +281,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         stopPlayback()
         player?.release()
         stretched = isStretched
-        val p = LoopPlayer(pcm, channels, sampleRate)
+        val p = LoopPlayer(source, audio.sampleRate)
         player = p
         applyGain() // the new player starts at 1×; carry the track's normalization over
         if (isStretched) {
@@ -592,9 +598,12 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             _grid.collect { applyClick() }
         }
         // When stretched, the region defines what gets stretched — re-run WSOLA once the user
-        // settles on new markers (debounced so a drag doesn't thrash the analyser).
+        // settles on new markers (debounced so a drag doesn't thrash the analyser). That includes a
+        // stretch still being worked out: it is of the old markers.
         viewModelScope.launch {
-            _region.drop(1).debounce(350).collect { if (stretched) rebuildPlayback() }
+            _region.drop(1).debounce(350).collect {
+                if (stretched || _stretching.value) rebuildPlayback()
+            }
         }
     }
 
@@ -715,7 +724,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (error is CancellationException) return
         result.fold(
             onSuccess = { audio ->
-                player = LoopPlayer(audio.pcm, audio.channels, audio.sampleRate).also {
+                player = LoopPlayer(PcmRegion(audio.pcm, audio.channels), audio.sampleRate).also {
                     it.setRegion(0, it.frameCount)
                 }
                 click = ClickTrack(audio.sampleRate, _clickPitch.value).also {
@@ -903,23 +912,21 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         val mode = _normalize.value
         viewModelScope.launch {
             val ok = runCatching {
-                val pcm = withContext(Dispatchers.Default) {
+                val timed = withContext(Dispatchers.Default) {
                     val startF = audio.fractionToFrame(start)
                     val endF = audio.fractionToFrame(end).coerceAtLeast(startF + 1)
-                    val slice = audio.pcm.copyOfRange(startF * audio.channels, endF * audio.channels)
-                    val timed = if (speed == 1f) slice
-                    else TimeStretch.stretch(slice, audio.channels, audio.sampleRate, speed)
-                    val gain = Gain.linearFor(mode, audio.peak, audio.rms)
-                    if (gain != 1f) {
-                        val softClip = Gain.needsSoftClip(gain, audio.peak)
-                        Gain.applyInto(timed, 0, timed, timed.size, gain, softClip) // in place
-                    }
-                    timed
+                    TimeStretch.plan(
+                        audio.pcm, audio.channels, audio.sampleRate, speed, startF, endF,
+                    )
                 }
+                val gain = Gain.linearFor(mode, audio.peak, audio.rms)
+                val softClip = Gain.needsSoftClip(gain, audio.peak)
                 withContext(Dispatchers.IO) {
                     val resolver = getApplication<Application>().contentResolver
                     resolver.openOutputStream(uri)?.buffered()?.use {
-                        WavWriter.write(it, pcm, audio.channels, audio.sampleRate)
+                        WavWriter.write(it, timed, audio.sampleRate) { chunk, count ->
+                            if (gain != 1f) Gain.applyInto(chunk, 0, chunk, count, gain, softClip)
+                        }
                     } ?: throw IOException("Could not open the destination file")
                 }
             }.onFailure { if (it is CancellationException) throw it }.isSuccess

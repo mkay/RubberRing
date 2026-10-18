@@ -16,8 +16,21 @@ object WavWriter {
     private const val HEADER_BYTES = 44
     private const val CHUNK_SAMPLES = 8192
 
-    fun write(out: OutputStream, pcm: ShortArray, channels: Int, sampleRate: Int) {
-        val dataBytes = pcm.size * 2
+    fun write(out: OutputStream, pcm: ShortArray, channels: Int, sampleRate: Int) =
+        write(out, PcmRegion(pcm, channels), sampleRate)
+
+    /**
+     * Write all of [source]. [process] sees each chunk before it goes out and may change its first
+     * `count` samples in place — how an export applies the track's gain without a full-size copy.
+     */
+    fun write(
+        out: OutputStream,
+        source: PcmSource,
+        sampleRate: Int,
+        process: (chunk: ShortArray, count: Int) -> Unit = { _, _ -> },
+    ) {
+        val channels = source.channels
+        val dataBytes = source.frameCount * channels * 2
         val blockAlign = channels * 2
         val header = ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
             put("RIFF".toByteArray(Charsets.US_ASCII))
@@ -36,15 +49,21 @@ object WavWriter {
         }
         out.write(header.array())
 
-        // Samples go out in chunks so a long loop doesn't need a second full-size copy as bytes.
-        val chunk = ByteBuffer.allocate(CHUNK_SAMPLES * 2).order(ByteOrder.LITTLE_ENDIAN)
-        var i = 0
-        while (i < pcm.size) {
-            val n = minOf(CHUNK_SAMPLES, pcm.size - i)
+        // Samples go out in chunks, read from the source as they go, so a long loop never needs a
+        // full-size copy — neither of the samples nor of their bytes.
+        val chunkFrames = CHUNK_SAMPLES / channels
+        val samples = ShortArray(chunkFrames * channels)
+        val chunk = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+        var frame = 0
+        while (frame < source.frameCount) {
+            val n = minOf(chunkFrames, source.frameCount - frame)
+            val count = n * channels
+            source.read(frame, samples, n)
+            process(samples, count)
             chunk.clear()
-            chunk.asShortBuffer().put(pcm, i, n)
-            out.write(chunk.array(), 0, n * 2)
-            i += n
+            chunk.asShortBuffer().put(samples, 0, count)
+            out.write(chunk.array(), 0, count * 2)
+            frame += n
         }
         out.flush()
     }

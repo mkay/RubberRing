@@ -2,6 +2,7 @@
 
 package de.singular.looper.audio
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -141,5 +142,41 @@ class TimeStretchTest {
                 }
             }
         }
+    }
+
+    /**
+     * A stretch is built as it is read, so a player can seek and wrap anywhere in it: any range read
+     * on its own must hold the same samples as the whole thing rendered in one go.
+     */
+    @Test
+    fun `a stretch reads the same in chunks as in one go`() {
+        val stereo = ShortArray(2 * 2 * sampleRate) { i -> (sin(2 * PI * 196 * (i / 2) / sampleRate) * 9_000 + i % 2 * 70).toInt().toShort() }
+        for (speed in listOf(0.5f, 0.8f, 1.25f)) {
+            val whole = TimeStretch.stretch(stereo, channels = 2, sampleRate = sampleRate, speed = speed)
+            val plan = TimeStretch.plan(stereo, channels = 2, sampleRate = sampleRate, speed = speed)
+            val chunked = ShortArray(plan.frameCount * 2)
+            val chunk = ShortArray(882 * 2)
+            // An odd chunk length, so chunks straddle grain boundaries and the raw ending.
+            var frame = 0
+            while (frame < plan.frameCount) {
+                val n = minOf(331, plan.frameCount - frame)
+                plan.read(frame, chunk, n)
+                System.arraycopy(chunk, 0, chunked, frame * 2, n * 2)
+                frame += n
+            }
+            assertArrayEquals("$speed×", whole, chunked)
+        }
+    }
+
+    /** A loop is stretched where it lies in the file, the same as if it had been cut out first. */
+    @Test
+    fun `a region stretches the same in place as cut out`() {
+        val input = sine(330.0, 3.0)
+        val start = sampleRate / 2
+        val end = 2 * sampleRate
+        val cut = TimeStretch.stretch(input.copyOfRange(start, end), channels = 1, sampleRate = sampleRate, speed = 0.75f)
+        val plan = TimeStretch.plan(input, channels = 1, sampleRate = sampleRate, speed = 0.75f, startFrame = start, endFrame = end)
+        val inPlace = ShortArray(plan.frameCount).also { plan.read(0, it, plan.frameCount) }
+        assertArrayEquals(cut, inPlace)
     }
 }

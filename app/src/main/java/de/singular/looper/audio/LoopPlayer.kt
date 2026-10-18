@@ -8,7 +8,8 @@ import android.media.AudioTrack
 import kotlin.math.min
 
 /**
- * Seamless region looping over an in-memory PCM buffer.
+ * Seamless region looping over a [PcmSource]: the decoded file as it is, or a time-stretched
+ * region built as it is read.
  *
  * Uses an [AudioTrack] in stream mode fed by a background thread. The feeder writes frames
  * from the current position up to [loopEndFrame], then wraps back to [loopStartFrame] with
@@ -18,11 +19,11 @@ import kotlin.math.min
  * All public methods are safe to call from the main thread.
  */
 class LoopPlayer(
-    private val pcm: ShortArray,
-    private val channels: Int,
+    private val source: PcmSource,
     private val sampleRate: Int,
 ) {
-    val frameCount: Int = pcm.size / channels
+    private val channels = source.channels
+    val frameCount: Int = source.frameCount
 
     @Volatile private var loopStartFrame: Int = 0
     @Volatile private var loopEndFrame: Int = frameCount
@@ -147,8 +148,10 @@ class LoopPlayer(
 
     private fun feedLoop(t: AudioTrack) {
         val chunkFrames = (sampleRate / 50).coerceAtLeast(256) // ~20 ms
-        // Scratch space for the gain and click stages; untouched while neither is active.
+        // Scratch space for a stretched source and the gain and click stages. The plain file at
+        // 1× with neither stage active is written straight from its array and never touches it.
         val scratch = ShortArray(chunkFrames * channels)
+        val direct = source as? PcmRegion
         feedCountIn(t, scratch, chunkFrames)
         var frame = positionFrame
         while (running) {
@@ -162,7 +165,6 @@ class LoopPlayer(
             if (frame < start || frame >= end) frame = start
 
             val framesThisWrite = min(chunkFrames, end - frame)
-            val shortOffset = frame * channels
             val shortCount = framesThisWrite * channels
             val g = gain
             val cl = click
@@ -175,13 +177,14 @@ class LoopPlayer(
             // decaying at loopEndFrame is cut off there rather than carried across. Audible only in
             // theory — the region snaps to the grid, so the wrap lands on a beat and the click that
             // was cut is struck again immediately at the region start.
-            val written = if (g == 1f && (cl == null || cg == null || cl.gain <= 0f)) {
-                t.write(pcm, shortOffset, shortCount, AudioTrack.WRITE_NON_BLOCKING)
+            val untouched = g == 1f && (cl == null || cg == null || cl.gain <= 0f)
+            val written = if (direct != null && untouched) {
+                val offset = (direct.startFrame + frame) * channels
+                t.write(direct.pcm, offset, shortCount, AudioTrack.WRITE_NON_BLOCKING)
             } else {
-                if (g == 1f) {
-                    System.arraycopy(pcm, shortOffset, scratch, 0, shortCount)
-                } else {
-                    Gain.applyInto(pcm, shortOffset, scratch, shortCount, g, softClip)
+                source.read(frame, scratch, framesThisWrite)
+                if (g != 1f) {
+                    Gain.applyInto(scratch, 0, scratch, shortCount, g, softClip) // in place
                 }
                 // After the gain stage, so the click is a fixed level the user set rather than
                 // something a loudness boost drags up and down under them.
