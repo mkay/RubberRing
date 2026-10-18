@@ -616,7 +616,10 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                         is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel)
 
                         is LooperUiState.Error -> Text(
-                            stringResource(R.string.error_format, stringResource(s.message)),
+                            stringResource(
+                                R.string.error_format,
+                                stringResource(s.message, *s.formatArgs.toTypedArray()),
+                            ),
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.error,
                         )

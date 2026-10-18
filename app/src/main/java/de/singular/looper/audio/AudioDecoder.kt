@@ -14,13 +14,35 @@ import java.nio.ByteOrder
  * into an in-memory interleaved 16-bit PCM buffer plus a mono display envelope, in a
  * single pass.
  *
- * Note: the whole file is held in memory (interleaved shorts). A 4-minute stereo track at
- * 44.1 kHz is ~84 MB — fine for typical practice material; very long files could strain
- * memory (revisit if it becomes a problem).
+ * The whole file is held in memory as interleaved shorts: about 10.6 MB a minute for 44.1 kHz
+ * stereo. A file too long for the app's heap is refused with [DecodeFailure.TOO_LONG] — up front
+ * from its stated duration where it has one, or as soon as the decode outgrows the budget.
  */
 object AudioDecoder {
 
     private const val TIMEOUT_US = 10_000L
+
+    // Heap kept back for everything that is not this track's audio: the UI, the library, the
+    // analysis passes. A loaded 5-minute track measured about 4 MB of Java heap besides its PCM.
+    private const val RESERVE_BYTES = 64L * 1024 * 1024
+
+    // Slack on top of the stated duration, so the usual few hundred frames of codec priming and
+    // padding fit without regrowing the buffer: whichever is more, 1% or one second.
+    private const val MARGIN_FRACTION = 0.01
+    private const val MARGIN_SECONDS = 1
+
+    // Buffer to start from when the file states no duration; it grows by half as it fills.
+    private const val UNKNOWN_DURATION_SECONDS = 60
+
+    /**
+     * The most frames of [channels]-channel audio the app can hold in a heap of [maxMemory] bytes.
+     * Each frame costs its 16-bit samples plus one byte for a time-stretch, whose search keeps a
+     * float for every fourth frame (see [TimeStretch.plan]).
+     */
+    fun maxFrames(maxMemory: Long, channels: Int): Int =
+        ((maxMemory - RESERVE_BYTES).coerceAtLeast(0) / (2L * channels + 1))
+            .coerceAtMost(Int.MAX_VALUE.toLong() / channels)
+            .toInt()
 
     /**
      * Why a decode failed, in the terms the UI cares about: either we never got at the file, or we
@@ -28,12 +50,14 @@ object AudioDecoder {
      * cause for the log; the enum is what picks the message the user sees, so that message can be
      * translated rather than being whatever the platform codec happened to say.
      */
-    enum class DecodeFailure { CANNOT_OPEN, DECODE_FAILED }
+    enum class DecodeFailure { CANNOT_OPEN, DECODE_FAILED, TOO_LONG }
 
+    /** [maxMinutes] is set for [DecodeFailure.TOO_LONG]: how much audio like this file's fits. */
     class DecodeException(
         val failure: DecodeFailure,
         message: String,
         cause: Throwable? = null,
+        val maxMinutes: Int = 0,
     ) : Exception(message, cause)
 
     /**
@@ -48,6 +72,7 @@ object AudioDecoder {
     fun decode(context: Context, uri: Uri, bucketCount: Int = 6000): DecodedAudio {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
+        var maxMinutes = 0
         try {
             context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
                 extractor.setDataSource(pfd.fileDescriptor)
@@ -66,9 +91,23 @@ object AudioDecoder {
             val durationUs =
                 if (inputFormat.containsKey(MediaFormat.KEY_DURATION)) inputFormat.getLong(MediaFormat.KEY_DURATION) else 0L
 
-            // Pre-size the PCM buffer from the duration estimate; grow if we overshoot.
-            val estimatedFrames = (durationUs / 1_000_000.0 * sampleRate).toLong().coerceAtLeast(1024)
-            var pcm = ShortArray((estimatedFrames * channels).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            val maxFrames = maxFrames(Runtime.getRuntime().maxMemory(), channels)
+            maxMinutes = maxFrames / sampleRate.coerceAtLeast(1) / 60
+            val estimatedFrames = (durationUs / 1_000_000.0 * sampleRate).toLong()
+            if (estimatedFrames > maxFrames) throw tooLong(maxMinutes)
+
+            // Size the PCM buffer once, from the stated duration plus a margin, so it is never
+            // copied: growing it, or trimming it to fit, would briefly hold the track twice.
+            val initialFrames = if (estimatedFrames > 0) {
+                estimatedFrames + maxOf(
+                    (estimatedFrames * MARGIN_FRACTION).toLong(),
+                    sampleRate.toLong() * MARGIN_SECONDS,
+                )
+            } else {
+                sampleRate.toLong() * UNKNOWN_DURATION_SECONDS
+            }
+            val capacity = minOf(maxOf(initialFrames, 1024L), maxFrames.toLong()).toInt()
+            var pcm = ShortArray(capacity * channels)
             var pcmSize = 0
 
             val decoder = MediaCodec.createDecoderByType(mime).apply {
@@ -106,8 +145,12 @@ object AudioDecoder {
                         val shorts = outBuf.order(ByteOrder.nativeOrder()).asShortBuffer()
                         val count = shorts.remaining()
                         if (pcmSize + count > pcm.size) {
-                            val newCap = maxOf(pcm.size * 2, pcmSize + count)
-                            pcm = pcm.copyOf(newCap)
+                            // The duration was missing or wrong. Grow by half rather than double:
+                            // the copy holds both buffers at once.
+                            val maxSize = maxFrames.toLong() * channels
+                            if (pcmSize + count > maxSize) throw tooLong(maxMinutes)
+                            val newCap = maxOf(pcm.size + pcm.size / 2L, pcmSize + count.toLong())
+                            pcm = pcm.copyOf(newCap.coerceAtMost(maxSize).toInt())
                         }
                         shorts.get(pcm, pcmSize, count)
                         pcmSize += count
@@ -118,16 +161,19 @@ object AudioDecoder {
             }
 
             if (pcmSize == 0) throw DecodeException(DecodeFailure.DECODE_FAILED, "Decoded no audio samples")
-            if (pcmSize != pcm.size) pcm = pcm.copyOf(pcmSize)
+            val frames = pcmSize / channels
 
             val durationMs = if (durationUs > 0) durationUs / 1000
-            else ((pcmSize / channels).toLong() * 1000 / sampleRate.coerceAtLeast(1))
+            else (frames.toLong() * 1000 / sampleRate.coerceAtLeast(1))
 
-            val waveform = buildEnvelope(pcm, channels, bucketCount, durationMs, sampleRate)
-            val (peak, rms) = Gain.measure(pcm)
-            return DecodedAudio(pcm, channels, sampleRate, waveform, peak, rms)
+            val waveform = buildEnvelope(pcm, channels, frames, bucketCount, durationMs, sampleRate)
+            val (peak, rms) = Gain.measure(pcm, pcmSize)
+            return DecodedAudio(pcm, channels, sampleRate, waveform, peak, rms, frames)
         } catch (e: DecodeException) {
             throw e
+        } catch (e: OutOfMemoryError) {
+            // The budget is an estimate; a heap that runs out anyway is the same answer.
+            throw tooLong(maxMinutes, e)
         } catch (e: Exception) {
             throw DecodeException(DecodeFailure.DECODE_FAILED, "Failed to decode audio: ${e.message}", e)
         } finally {
@@ -137,14 +183,21 @@ object AudioDecoder {
         }
     }
 
+    private fun tooLong(maxMinutes: Int, cause: Throwable? = null) = DecodeException(
+        DecodeFailure.TOO_LONG,
+        "Too long for the heap (about $maxMinutes min fit)",
+        cause,
+        maxMinutes,
+    )
+
     private fun buildEnvelope(
         pcm: ShortArray,
         channels: Int,
+        frames: Int,
         bucketCount: Int,
         durationMs: Long,
         sampleRate: Int,
     ): WaveformData {
-        val frames = pcm.size / channels
         val minima = FloatArray(bucketCount) { 0f }
         val maxima = FloatArray(bucketCount) { 0f }
         if (frames == 0) return WaveformData(minima, maxima, durationMs, sampleRate, channels)

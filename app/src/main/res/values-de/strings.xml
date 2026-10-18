@@ -36,6 +36,7 @@
     <string name="error_unreadable_file">Die ausgewählte Datei konnte nicht gelesen werden</string>
     <string name="error_cannot_open_file">Die Datei konnte nicht geöffnet werden</string>
     <string name="error_decode_failed">Diese Audiodatei konnte nicht dekodiert werden</string>
+    <string name="error_too_long">Dieser Track ist zu lang für den Speicher dieses Geräts. Tracks bis etwa %1$d Minuten passen.</string>
     <string name="error_unknown">Unbekannter Fehler</string>
 
     <string name="backup_exported">Bibliothek gesichert</string>

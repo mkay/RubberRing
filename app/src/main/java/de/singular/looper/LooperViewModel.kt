@@ -25,7 +25,6 @@ import de.singular.looper.audio.Gain
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.audio.NoteNaming
-import de.singular.looper.audio.PcmRegion
 import de.singular.looper.audio.PcmSource
 import de.singular.looper.audio.Quality
 import de.singular.looper.audio.TimeStretch
@@ -66,22 +65,27 @@ sealed interface LooperUiState {
     /**
      * A load that failed. Carries the *resource* rather than a resolved string so the message is
      * rendered in whatever locale is in effect when it is shown, not the one that was current when
-     * the failure happened.
+     * the failure happened. [formatArgs] fill the resource's placeholders, if it has any.
      */
-    data class Error(@StringRes val message: Int) : LooperUiState
+    data class Error(
+        @StringRes val message: Int,
+        val formatArgs: List<Int> = emptyList(),
+    ) : LooperUiState
 }
 
 /** Which resource explains [this] to the user. Platform detail stays in the log, not on screen. */
 @StringRes
-private fun Throwable.toErrorMessage(): Int = when (this) {
+private fun Throwable.toErrorState(): LooperUiState.Error = when (this) {
     is LibraryRepository.UnreadableFileException -> R.string.error_unreadable_file
     is AudioDecoder.DecodeException -> when (failure) {
         AudioDecoder.DecodeFailure.CANNOT_OPEN -> R.string.error_cannot_open_file
         AudioDecoder.DecodeFailure.DECODE_FAILED -> R.string.error_decode_failed
+        AudioDecoder.DecodeFailure.TOO_LONG ->
+            return LooperUiState.Error(R.string.error_too_long, listOf(maxMinutes))
     }
 
     else -> R.string.error_unknown
-}
+}.let { LooperUiState.Error(it) }
 
 /**
  * Maximum number of named loops a track may hold. The chip row scrolls sideways, so this is a
@@ -236,7 +240,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
         if (s == 1f) {
             _stretching.value = false
-            swapPlayer(PcmRegion(audio.pcm, audio.channels), isStretched = false, r, audio, wasPlaying)
+            swapPlayer(audio.source(), isStretched = false, r, audio, wasPlaying)
             return
         }
 
@@ -724,7 +728,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (error is CancellationException) return
         result.fold(
             onSuccess = { audio ->
-                player = LoopPlayer(PcmRegion(audio.pcm, audio.channels), audio.sampleRate).also {
+                player = LoopPlayer(audio.source(), audio.sampleRate).also {
                     it.setRegion(0, it.frameCount)
                 }
                 click = ClickTrack(audio.sampleRate, _clickPitch.value).also {
@@ -735,7 +739,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 applyGain()
                 applyClick() // after onLoaded, so it sees the track's restored grid and meter
             },
-            onFailure = { _state.value = LooperUiState.Error(it.toErrorMessage()) },
+            onFailure = { _state.value = it.toErrorState() },
         )
     }
 

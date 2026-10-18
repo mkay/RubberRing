@@ -116,19 +116,20 @@ object Gain {
     }
 
     /**
-     * The peak (max |sample|) and RMS of [pcm], both as 0f..1f fractions of full scale.
-     * Measured across every sample of every channel.
+     * The peak (max |sample|) and RMS of the first [count] samples of [pcm], both as 0f..1f
+     * fractions of full scale. Measured across every sample of every channel.
      */
-    fun measure(pcm: ShortArray): Pair<Float, Float> {
-        if (pcm.isEmpty()) return 0f to 0f
+    fun measure(pcm: ShortArray, count: Int = pcm.size): Pair<Float, Float> {
+        if (count <= 0) return 0f to 0f
         var peak = 0
         var sumSquares = 0.0
-        for (s in pcm) {
+        for (i in 0 until count) {
+            val s = pcm[i]
             val mag = abs(s.toInt())
             if (mag > peak) peak = mag
             sumSquares += s.toDouble() * s.toDouble()
         }
-        val rms = sqrt(sumSquares / pcm.size) / FULL_SCALE
+        val rms = sqrt(sumSquares / count) / FULL_SCALE
         return (peak / FULL_SCALE) to rms.toFloat()
     }
 }
