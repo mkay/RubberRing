@@ -65,27 +65,37 @@ sealed interface LooperUiState {
     /**
      * A load that failed. Carries the *resource* rather than a resolved string so the message is
      * rendered in whatever locale is in effect when it is shown, not the one that was current when
-     * the failure happened. [formatArgs] fill the resource's placeholders, if it has any.
+     * the failure happened.
      */
-    data class Error(
-        @StringRes val message: Int,
-        val formatArgs: List<Int> = emptyList(),
-    ) : LooperUiState
+    data class Error(@StringRes val message: Int) : LooperUiState
+
+    /**
+     * A load refused because the track would not fit in memory. A state of its own rather than an
+     * [Error], because its message counts minutes and so is a plural, not a plain string.
+     */
+    data class TooLong(val maxMinutes: Int) : LooperUiState
 }
 
-/** Which resource explains [this] to the user. Platform detail stays in the log, not on screen. */
+/** The state that explains [this] to the user. Platform detail stays in the log, not on screen. */
+private fun Throwable.toErrorState(): LooperUiState {
+    if (this is AudioDecoder.DecodeException && failure == AudioDecoder.DecodeFailure.TOO_LONG) {
+        return LooperUiState.TooLong(maxMinutes)
+    }
+    return LooperUiState.Error(toErrorMessage())
+}
+
+/** Which resource explains [this] to the user. */
 @StringRes
-private fun Throwable.toErrorState(): LooperUiState.Error = when (this) {
+private fun Throwable.toErrorMessage(): Int = when (this) {
     is LibraryRepository.UnreadableFileException -> R.string.error_unreadable_file
     is AudioDecoder.DecodeException -> when (failure) {
         AudioDecoder.DecodeFailure.CANNOT_OPEN -> R.string.error_cannot_open_file
         AudioDecoder.DecodeFailure.DECODE_FAILED -> R.string.error_decode_failed
-        AudioDecoder.DecodeFailure.TOO_LONG ->
-            return LooperUiState.Error(R.string.error_too_long, listOf(maxMinutes))
+        AudioDecoder.DecodeFailure.TOO_LONG -> R.string.error_unknown // a state of its own
     }
 
     else -> R.string.error_unknown
-}.let { LooperUiState.Error(it) }
+}
 
 /**
  * Maximum number of named loops a track may hold. The chip row scrolls sideways, so this is a

@@ -53,7 +53,10 @@
     <string name="error_unreadable_file">Could not read the selected file</string>
     <string name="error_cannot_open_file">Could not open the file</string>
     <string name="error_decode_failed">Could not decode this audio file</string>
-    <string name="error_too_long">This track is too long for this device\'s memory. Tracks up to about %1$d minutes fit.</string>
+    <plurals name="error_too_long">
+        <item quantity="one">This track is too long for this device\'s memory. Tracks up to about %1$d minute fit.</item>
+        <item quantity="other">This track is too long for this device\'s memory. Tracks up to about %1$d minutes fit.</item>
+    </plurals>
     <string name="error_unknown">Unknown error</string>
 
     <!-- ===== Backup and restore ===== -->

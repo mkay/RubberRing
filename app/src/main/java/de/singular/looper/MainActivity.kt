@@ -616,9 +616,19 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                         is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel)
 
                         is LooperUiState.Error -> Text(
+                            stringResource(R.string.error_format, stringResource(s.message)),
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+
+                        is LooperUiState.TooLong -> Text(
                             stringResource(
                                 R.string.error_format,
-                                stringResource(s.message, *s.formatArgs.toTypedArray()),
+                                pluralStringResource(
+                                    R.plurals.error_too_long,
+                                    s.maxMinutes,
+                                    s.maxMinutes,
+                                ),
                             ),
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.error,
