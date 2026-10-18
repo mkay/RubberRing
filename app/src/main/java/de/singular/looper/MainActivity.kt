@@ -358,6 +358,9 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
     val currentStarred by viewModel.currentStarred.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    // The tab Settings opens on: Playback from the drawer, System from the keep-awake notice,
+    // which is where the setting it explains lives.
+    var settingsTab by remember { mutableStateOf(SettingsTab.PLAYBACK) }
     var showSupport by remember { mutableStateOf(false) }
     var showKeepAwakeInfo by remember { mutableStateOf(false) }
     // The library's selection mode: the ids of the picked tracks (empty = not selecting). Held here
@@ -457,6 +460,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
     // backup-result toast above stay in scope, so Backup/Restore works from here too.
     if (showSettings) {
         SettingsScreen(
+            initialTab = settingsTab,
             following = following,
             keepScreenOn = keepScreenOn,
             saveZoom = saveZoom,
@@ -553,7 +557,12 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                     }
                 },
                 onImport = { closeThen { openPicker() } },
-                onSettings = { closeThen { showSettings = true } },
+                onSettings = {
+                    closeThen {
+                        settingsTab = SettingsTab.PLAYBACK
+                        showSettings = true
+                    }
+                },
                 onSupport = { closeThen { showSupport = true } },
                 onOpenRecent = { track -> closeThen { viewModel.open(track) } },
                 onQuickHelp = { closeThen { showHelp = true } },
@@ -859,7 +868,11 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
             title = { Text(stringResource(R.string.keep_awake_title)) },
             text = { Text(stringResource(R.string.keep_awake_body)) },
             confirmButton = {
-                TextButton(onClick = { showKeepAwakeInfo = false; showSettings = true }) {
+                TextButton(onClick = {
+                    showKeepAwakeInfo = false
+                    settingsTab = SettingsTab.SYSTEM
+                    showSettings = true
+                }) {
                     Text(stringResource(R.string.settings_title))
                 }
             },
@@ -898,12 +911,13 @@ private enum class SettingsTab(@StringRes val title: Int) {
 
 /**
  * Full-screen settings, reached from the drawer: the playback toggles, the app's own set-up
- * (appearance, backup/restore), and About, split across the tabs in [SettingsTab]. [onClose] backs
- * out to the previous screen.
+ * (appearance, backup/restore), and About, split across the tabs in [SettingsTab]. It opens on
+ * [initialTab]. [onClose] backs out to the previous screen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(
+    initialTab: SettingsTab,
     following: Boolean,
     keepScreenOn: Boolean,
     saveZoom: Boolean,
@@ -924,7 +938,7 @@ private fun SettingsScreen(
     BackHandler(onBack = onClose)
     // Local state: back from here leaves the settings altogether, so nothing a level up needs to
     // know which tab was showing.
-    var tab by rememberSaveable { mutableStateOf(SettingsTab.PLAYBACK) }
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
     Scaffold(
         topBar = {
             TopAppBar(

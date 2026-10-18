@@ -19,6 +19,7 @@ All notable changes to this project are documented here. The format is based on 
 - Slowing down a long song could stutter and then crash by running out of memory (issue #7): at 0.5× a five-minute track needed more than the 256 MB a typical phone allows an app. The stretched audio is now built as it plays instead of into a buffer twice the size of the song, so a stretch costs little more than the track itself at any length and speed. Working it out takes about half as long, and the old speed keeps playing until the new one is ready.
 - Loading a track briefly needed up to twice its size in memory while the decoder grew and trimmed its buffer. It now decodes into one buffer sized from the file's duration.
 - A track too long for the phone's memory is refused when it is loaded, with a message giving the limit for that phone (about 15 minutes of stereo on a typical one), instead of failing later.
+- The Settings button in the keep-awake notice now opens the System tab, where the setting is, instead of Playback.
 
 ## [0.13] - 2026-10-12
 
