@@ -162,6 +162,7 @@
     <!-- ===== Drawer ===== -->
 
     <string name="drawer_library">Library</string>
+    <string name="drawer_home">Home</string>
     <string name="drawer_import">Import new file</string>
     <string name="drawer_support">Support Rubber Ring</string>
     <string name="drawer_quick_help">Quick help</string>
@@ -206,7 +207,22 @@
 
     <string name="library_intro">Pick an audio file to mark and loop a section.</string>
     <string name="library_formats">Supports MP3, AAC (M4A), FLAC, WAV, and OGG.</string>
-    <string name="library_heading">Library</string>
+    <string name="library_all_tracks">All tracks (%1$d)</string>
+    <string name="library_back_to">Back to %1$s</string>
+    <string name="close_track_title">Close %1$s?</string>
+    <string name="close_track_body">Home closes the track. Its markers and saved loops are kept.</string>
+    <string name="close_track_confirm">Close track</string>
+    <string name="library_empty">No tracks yet. Import one with the + button above.</string>
+    <string name="search_hint">Search tracks</string>
+    <string name="search_no_match">No tracks match.</string>
+    <string name="cd_close_search">Close search</string>
+    <string name="cd_sort">Sort tracks</string>
+    <string name="sort_recent">Recently used</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_length">Length</string>
+    <string name="sort_added">Date added</string>
+    <string name="help_library_title">Find a track</string>
+    <string name="help_library_body">Home lists your most recent tracks; All tracks opens the library. There, pull the list down to search by name, and use the sort button for other orders. Long-press a track to select several and delete them together.</string>
     <!-- Stands in for the name of an imported file that arrived without one. -->
     <string name="untitled_track">Untitled</string>
     <string name="rename_track_title">Rename track</string>

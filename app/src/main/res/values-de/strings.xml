@@ -114,6 +114,7 @@
     <string name="whats_new_changelog">Vollständiges Änderungsprotokoll (EN)</string>
 
     <string name="drawer_library">Bibliothek</string>
+    <string name="drawer_home">Start</string>
     <string name="drawer_import">Neue Datei importieren</string>
     <string name="drawer_support">Rubber Ring unterstützen</string>
     <string name="drawer_quick_help">Kurzhilfe</string>
@@ -154,7 +155,22 @@
 
     <string name="library_intro">Wähle eine Audiodatei und markiere einen Abschnitt.</string>
     <string name="library_formats">Unterstützt MP3, AAC (M4A), FLAC, WAV und OGG.</string>
-    <string name="library_heading">Bibliothek</string>
+    <string name="library_all_tracks">Alle Tracks (%1$d)</string>
+    <string name="library_back_to">Zurück zu %1$s</string>
+    <string name="close_track_title">%1$s schließen?</string>
+    <string name="close_track_body">Start schließt den Track. Seine Marker und gespeicherten Loops bleiben erhalten.</string>
+    <string name="close_track_confirm">Track schließen</string>
+    <string name="library_empty">Noch keine Tracks. Importiere einen mit dem +-Knopf oben.</string>
+    <string name="search_hint">Tracks durchsuchen</string>
+    <string name="search_no_match">Keine passenden Tracks.</string>
+    <string name="cd_close_search">Suche schließen</string>
+    <string name="cd_sort">Tracks sortieren</string>
+    <string name="sort_recent">Zuletzt verwendet</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_length">Länge</string>
+    <string name="sort_added">Hinzugefügt</string>
+    <string name="help_library_title">Einen Track finden</string>
+    <string name="help_library_body">Start zeigt deine zuletzt verwendeten Tracks; Alle Tracks öffnet die Bibliothek. Dort ziehst du die Liste nach unten, um nach Namen zu suchen, und mit dem Sortier-Knopf änderst du die Reihenfolge. Halte einen Track gedrückt, um mehrere auszuwählen und gemeinsam zu löschen.</string>
     <string name="untitled_track">Ohne Titel</string>
     <string name="rename_track_title">Track umbenennen</string>
     <plurals name="track_loop_count">

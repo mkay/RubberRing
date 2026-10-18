@@ -32,6 +32,7 @@ import de.singular.looper.audio.WavWriter
 import de.singular.looper.audio.WaveformData
 import de.singular.looper.library.ArrangementStep
 import de.singular.looper.library.LibraryRepository
+import de.singular.looper.library.LibrarySort
 import de.singular.looper.library.LibraryTrack
 import de.singular.looper.library.SavedLoop
 import java.io.IOException
@@ -119,6 +120,7 @@ private const val KEY_CLICK_VOLUME = "click_volume"
 private const val KEY_CLICK_PITCH = "click_pitch"
 private const val KEY_DETECT_MODE = "detect_mode"
 private const val KEY_CHORD_OVERLAY = "chord_overlay"
+private const val KEY_LIBRARY_SORT = "library_sort"
 
 /** How many tracks the "Recent" list in the drawer shows. */
 private const val RECENTS_LIMIT = 5
@@ -321,7 +323,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     private val _library = MutableStateFlow<List<LibraryTrack>>(emptyList())
     val libraryTracks: StateFlow<List<LibraryTrack>> = _library.asStateFlow()
 
-    /** The most recently opened tracks, newest first — powers the drawer's "Recent" list. */
+    /** The most recently opened tracks, newest first: "Recent" in the drawer and on home. */
     val recentTracks: StateFlow<List<LibraryTrack>> = _library
         .map { tracks ->
             tracks.filter { it.lastOpenedAt > 0 }
@@ -418,6 +420,16 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     fun setThemeMode(mode: ThemeMode) {
         _themeMode.value = mode
         prefs.edit { putString(KEY_THEME_MODE, mode.name) }
+    }
+
+    // The order the Library screen lists tracks in. A preference, so it is kept and backed up.
+    private val _librarySort =
+        MutableStateFlow(LibrarySort.from(prefs.getString(KEY_LIBRARY_SORT, null)))
+    val librarySort: StateFlow<LibrarySort> = _librarySort.asStateFlow()
+
+    fun setLibrarySort(sort: LibrarySort) {
+        _librarySort.value = sort
+        prefs.edit { putString(KEY_LIBRARY_SORT, sort.name) }
     }
 
     // ---- What's new ----
@@ -533,6 +545,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         .put(KEY_SHOW_CHORDS, _showChords.value)
         .put(KEY_GERMAN_NOTES, _noteNaming.value == NoteNaming.GERMAN)
         .put(KEY_THEME_MODE, _themeMode.value.name)
+        .put(KEY_LIBRARY_SORT, _librarySort.value.name)
         .toString()
 
     private fun applySettingsJson(json: String?) {
@@ -547,6 +560,9 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
                 if (o.getBoolean(KEY_GERMAN_NOTES)) NoteNaming.GERMAN else NoteNaming.INTERNATIONAL
         }
         if (o.has(KEY_THEME_MODE)) _themeMode.value = readThemeMode(o.getString(KEY_THEME_MODE))
+        if (o.has(KEY_LIBRARY_SORT)) {
+            _librarySort.value = LibrarySort.from(o.getString(KEY_LIBRARY_SORT))
+        }
         prefs.edit {
             putBoolean(KEY_FOLLOW_PLAYHEAD, _followPlayhead.value)
             putBoolean(KEY_KEEP_SCREEN_ON, _keepScreenOn.value)
@@ -555,6 +571,7 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             putBoolean(KEY_SHOW_CHORDS, _showChords.value)
             putBoolean(KEY_GERMAN_NOTES, _noteNaming.value == NoteNaming.GERMAN)
             putString(KEY_THEME_MODE, _themeMode.value.name)
+            putString(KEY_LIBRARY_SORT, _librarySort.value.name)
         }
     }
 
@@ -1561,12 +1578,20 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         refreshLibrary()
     }
 
+    /** Whether [track] is the one open in the player. */
+    fun isOpen(track: LibraryTrack): Boolean = track.id == currentTrack?.id
+
     /** Delete a track from the library (removes its file + saved loops). */
     fun deleteTrack(track: LibraryTrack) = deleteTracks(listOf(track))
 
     /** Delete several tracks at once — the library's selection mode. Irreversible, as with one. */
     fun deleteTracks(tracks: List<LibraryTrack>) {
-        if (tracks.any { it.id == currentTrack?.id }) currentTrack = null
+        // The Library can sit over the open track, so that one can be among them. It is closed,
+        // and forgotten first so closing doesn't write its loop state back into the index.
+        if (tracks.any { it.id == currentTrack?.id }) {
+            currentTrack = null
+            closeTrack()
+        }
         viewModelScope.launch {
             withContext(Dispatchers.IO) { library.removeAll(tracks) }
             refreshLibrary()

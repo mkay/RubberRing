@@ -43,8 +43,6 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.aspectRatio
@@ -63,20 +61,17 @@ import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
@@ -188,6 +183,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.text.TextAutoSize
+import de.singular.looper.ui.LibraryScreen
+import de.singular.looper.ui.LibrarySortButton
+import de.singular.looper.ui.TrackRow
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -355,6 +353,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
     val noteNaming by viewModel.noteNaming.collectAsStateWithLifecycle()
     val library by viewModel.libraryTracks.collectAsStateWithLifecycle()
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
+    val librarySort by viewModel.librarySort.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showSupport by remember { mutableStateOf(false) }
@@ -363,6 +362,17 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
     // rather than in LibraryContent because selecting takes over the app bar, which lives here.
     var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
     var pendingDelete by remember { mutableStateOf<List<LibraryTrack>>(emptyList()) }
+    var renameTarget by remember { mutableStateOf<LibraryTrack?>(null) }
+    var confirmHome by remember { mutableStateOf(false) }
+    // Whether the Library screen is the one under the player, rather than home. It stays set while
+    // a track is open, so backing out of the player returns to whichever of the two it came from.
+    var libraryOpen by rememberSaveable { mutableStateOf(false) }
+    // The Library shown over an open track, which stays loaded underneath — Back returns to it
+    // just as it was. The way Settings sits over everything, but within the scaffold.
+    var libraryOverPlayer by rememberSaveable { mutableStateOf(false) }
+    // The library's search, hoisted with it: Back closes the field before it leaves the screen.
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -465,24 +475,48 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
         return
     }
 
-    val inLibrary = state is LooperUiState.Empty
+    val trackOpen = state !is LooperUiState.Empty
+    val overPlayer = trackOpen && libraryOverPlayer
+    val inLibrary = (!trackOpen && libraryOpen) || overPlayer
+    val inHome = !trackOpen && !libraryOpen
     val selecting = selection.isNotEmpty()
 
+    val closeSearch = { searchOpen = false; query = "" }
+    val closeLibrary = { libraryOpen = false; closeSearch() }
+    val backToPlayer = { libraryOverPlayer = false; closeSearch() }
+
+    // A track closed under the Library — deleted from it — leaves the Library where it is, now
+    // with nothing under it. Home clears the overlay itself first, so this doesn't pull it back.
+    LaunchedEffect(trackOpen) {
+        if (!trackOpen && libraryOverPlayer) {
+            libraryOverPlayer = false
+            libraryOpen = true
+        }
+    }
+    // A new track loading, however it was asked for — the Library, the drawer's recents, an
+    // import, another app handing a file over — is shown, not left under the Library.
+    val loading = state is LooperUiState.Loading
+    LaunchedEffect(loading) { if (loading) libraryOverPlayer = false }
+
     // Keep the selection honest: drop ids that are no longer in the library (deleted, or replaced
-    // by a restore), and abandon it entirely on the way out of the library.
+    // by a restore), and abandon it entirely on the way out of the Library screen.
     LaunchedEffect(library, inLibrary) {
         selection = if (inLibrary) selection.intersect(library.map { it.id }.toSet()) else emptySet()
     }
 
-    // The library is the home view. Backing out of the play view returns there rather than
-    // quitting; a swipe-back with the drawer open just closes the drawer. In the library with the
-    // drawer closed and nothing selected the handler is disabled, so back keeps its default
-    // behaviour of exiting.
-    BackHandler(enabled = drawerState.isOpen || !inLibrary || selecting) {
+    // Home is the root. Back unwinds one step at a time — the drawer, a selection, the search, the
+    // Library over a track (to that track), the player (to the screen it was opened from), the
+    // Library screen — and on home with nothing open the handler is disabled, so back keeps its
+    // default behaviour of exiting.
+    BackHandler(enabled = drawerState.isOpen || !inHome || selecting) {
         when {
             drawerState.isOpen -> scope.launch { drawerState.close() }
             selecting -> selection = emptySet()
-            else -> viewModel.closeTrack()
+            overPlayer && searchOpen -> closeSearch()
+            overPlayer -> backToPlayer()
+            trackOpen -> viewModel.closeTrack()
+            searchOpen -> closeSearch()
+            else -> closeLibrary()
         }
     }
 
@@ -496,10 +530,26 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
         drawerState = drawerState,
         drawerContent = {
             LooperDrawer(
-                // In the library itself the "Library" destination is redundant, so hide it.
+                // Neither destination is offered from the screen it leads to.
+                showHome = !inHome,
                 showLibrary = !inLibrary,
                 recents = recents,
-                onLibrary = { closeThen { viewModel.closeTrack() } },
+                // Home closes the track, so with one open it asks first.
+                onHome = {
+                    closeThen {
+                        if (trackOpen) confirmHome = true else closeLibrary()
+                    }
+                },
+                // From a track the Library opens over it, and the track plays on underneath.
+                onLibrary = {
+                    closeThen {
+                        if (trackOpen) {
+                            libraryOverPlayer = true
+                        } else {
+                            libraryOpen = true
+                        }
+                    }
+                },
                 onImport = { closeThen { openPicker() } },
                 onSettings = { closeThen { showSettings = true } },
                 onSupport = { closeThen { showSupport = true } },
@@ -542,8 +592,9 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                         }
                     },
                     title = {
-                        // On the library home the wordmark banner already names the app, so the
-                        // corner title steps aside there; it stays on a loaded track (its filename).
+                        // On home the wordmark banner already names the app, so the corner title
+                        // steps aside there; it names the Library screen, and a loaded track (its
+                        // filename).
                         Text(
                             text = when {
                                 selecting -> pluralStringResource(
@@ -552,6 +603,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                                     selection.size,
                                 )
 
+                                inLibrary -> stringResource(R.string.drawer_library)
                                 else -> currentFileName(state) ?: ""
                             },
                             maxLines = 1,
@@ -559,6 +611,15 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                         )
                     },
                     actions = {
+                        if (inLibrary && !selecting) {
+                            LibrarySortButton(librarySort, viewModel::setLibrarySort)
+                            IconButton(onClick = { openPicker() }) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = stringResource(R.string.drawer_import),
+                                )
+                            }
+                        }
                         if (selecting) {
                             IconButton(
                                 onClick = { pendingDelete = library.filter { it.id in selection } },
@@ -585,22 +646,59 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                 )
             },
         ) { innerPadding ->
+            // The Library, as the screen under no track or over an open one. [onOpen] is the one
+            // thing that differs, and [returnTo] names the track there is to go back to.
+            val libraryScreen: @Composable (
+                onOpen: (LibraryTrack) -> Unit,
+                returnTo: String?,
+            ) -> Unit = { onOpen, returnTo ->
+                    LibraryScreen(
+                        library = library,
+                        sort = librarySort,
+                        query = query,
+                        selection = selection,
+                        searchOpen = searchOpen,
+                        onOpenSearch = { searchOpen = true },
+                        onQueryChange = { query = it },
+                        onCloseSearch = closeSearch,
+                        onOpen = onOpen,
+                        onToggleSelect = { track ->
+                            selection = if (track.id in selection) selection - track.id
+                            else selection + track.id
+                        },
+                        onRename = { track -> renameTarget = track },
+                        onDelete = { track -> pendingDelete = listOf(track) },
+                        returnTo = returnTo,
+                        onReturn = backToPlayer,
+                        modifier = Modifier.padding(innerPadding),
+                    )
+                }
             when (val s = state) {
-                is LooperUiState.Empty -> LibraryContent(
-                    library = library,
-                    selection = selection,
-                    onImport = { openPicker() },
-                    onOpen = viewModel::open,
-                    onToggleSelect = { track ->
-                        selection = if (track.id in selection) selection - track.id
-                        else selection + track.id
-                    },
-                    onRename = viewModel::renameTrack,
-                    onRequestDelete = { track -> pendingDelete = listOf(track) },
-                    modifier = Modifier.padding(innerPadding),
-                )
+                is LooperUiState.Empty -> if (libraryOpen) {
+                    libraryScreen(viewModel::open, null)
+                } else {
+                    HomeContent(
+                        library = library,
+                        recents = recents,
+                        onImport = { openPicker() },
+                        onOpen = viewModel::open,
+                        onShowLibrary = { libraryOpen = true },
+                        modifier = Modifier.padding(innerPadding),
+                    )
+                }
 
-                else -> Box(
+                else -> if (overPlayer) {
+                    // The track underneath is simply returned to, not loaded again. Another one's
+                    // player then backs out to the Library, like any other opened from there.
+                    libraryScreen({ track ->
+                        if (viewModel.isOpen(track)) {
+                            backToPlayer()
+                        } else {
+                            libraryOpen = true
+                            viewModel.open(track)
+                        }
+                    }, currentFileName(state) ?: "")
+                } else Box(
                     Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -643,6 +741,40 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
 
     if (showSupport) {
         SupportDialog(onDismiss = { showSupport = false })
+    }
+
+    if (confirmHome) {
+        AlertDialog(
+            onDismissRequest = { confirmHome = false },
+            title = {
+                Text(stringResource(R.string.close_track_title, currentFileName(state) ?: ""))
+            },
+            text = { Text(stringResource(R.string.close_track_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmHome = false
+                    libraryOverPlayer = false
+                    viewModel.closeTrack()
+                    closeLibrary()
+                }) { Text(stringResource(R.string.close_track_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHome = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    renameTarget?.let { target ->
+        LoopNameDialog(
+            title = stringResource(R.string.rename_track_title),
+            initial = target.name,
+            // Two imported files may legitimately share a name, so tracks aren't constrained.
+            taken = emptyList(),
+            onConfirm = { viewModel.renameTrack(target, it); renameTarget = null },
+            onDismiss = { renameTarget = null },
+        )
     }
 
     if (showHelp) {
@@ -1136,14 +1268,16 @@ private fun AboutLink(text: String, onClick: () -> Unit) {
 }
 
 /**
- * The left navigation drawer, shared by the library and play views: primary destinations
- * (Library — hidden when [showLibrary] is false, i.e. already in the library — Import, Settings,
- * and Support), a recents list, and Quick help pinned to the bottom.
+ * The left navigation drawer, shared by every view: primary destinations (Home and Library, each
+ * hidden on its own screen via [showHome] and [showLibrary]; Import, Settings, and Support), a
+ * recents list, and Quick help pinned to the bottom.
  */
 @Composable
 private fun LooperDrawer(
+    showHome: Boolean,
     showLibrary: Boolean,
     recents: List<LibraryTrack>,
+    onHome: () -> Unit,
     onLibrary: () -> Unit,
     onImport: () -> Unit,
     onSettings: () -> Unit,
@@ -1161,6 +1295,15 @@ private fun LooperDrawer(
             )
 
             val itemPadding = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+            if (showHome) {
+                NavigationDrawerItem(
+                    label = { Text(stringResource(R.string.drawer_home)) },
+                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                    selected = false,
+                    onClick = onHome,
+                    modifier = itemPadding,
+                )
+            }
             if (showLibrary) {
                 NavigationDrawerItem(
                     label = { Text(stringResource(R.string.drawer_library)) },
@@ -1172,7 +1315,7 @@ private fun LooperDrawer(
             }
             NavigationDrawerItem(
                 label = { Text(stringResource(R.string.drawer_import)) },
-                icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 selected = false,
                 onClick = onImport,
                 modifier = itemPadding,
@@ -1519,6 +1662,10 @@ private fun QuickHelpDialog(onDismiss: () -> Unit) {
                     stringResource(R.string.help_recall_loop_title),
                     stringResource(R.string.help_recall_loop_body),
                 )
+                HelpItem(
+                    stringResource(R.string.help_library_title),
+                    stringResource(R.string.help_library_body),
+                )
             }
         },
         confirmButton = {
@@ -1564,26 +1711,29 @@ private fun RingSpinner(modifier: Modifier = Modifier) {
     )
 }
 
+/**
+ * The home screen: the welcome block, and under it the few most recently used tracks with a way
+ * on to the rest. Managing tracks — rename, delete, picking several — lives on the Library screen,
+ * so a tap here only ever opens.
+ */
 @Composable
-private fun LibraryContent(
+private fun HomeContent(
     library: List<LibraryTrack>,
-    selection: Set<String>,
+    recents: List<LibraryTrack>,
     onImport: () -> Unit,
     onOpen: (LibraryTrack) -> Unit,
-    onToggleSelect: (LibraryTrack) -> Unit,
-    onRename: (LibraryTrack, String) -> Unit,
-    onRequestDelete: (LibraryTrack) -> Unit,
+    onShowLibrary: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var renameTarget by remember { mutableStateOf<LibraryTrack?>(null) }
-    val selecting = selection.isNotEmpty()
-
+    // With no library yet, centre the welcome block vertically; otherwise pin it to the top and
+    // let the recents follow. Those are few enough to fit, but a short screen or landscape can
+    // still need to scroll.
+    val column = if (library.isEmpty()) modifier.fillMaxSize()
+    else modifier.fillMaxSize().verticalScroll(rememberScrollState())
     Column(
-        modifier.fillMaxSize().padding(16.dp),
+        column.padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // With no library yet, centre the welcome block vertically; otherwise pin it to the top
-        // and let the list fill the space below.
         if (library.isEmpty()) Spacer(Modifier.weight(1f))
 
         // The ring logo on its own — no tile — so it reads cleanly on either theme.
@@ -1636,41 +1786,26 @@ private fun LibraryContent(
             Spacer(Modifier.weight(1f))
         } else {
             Spacer(Modifier.height(24.dp))
-            Text(
-                stringResource(R.string.library_heading),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            LazyColumn(
-                Modifier.fillMaxWidth().weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(library, key = { it.id }) { track ->
-                    LibraryRow(
-                        track = track,
-                        selected = track.id in selection,
-                        selecting = selecting,
-                        // While selecting, a tap picks rather than opens — one meaning per tap.
-                        onClick = { if (selecting) onToggleSelect(track) else onOpen(track) },
-                        onLongClick = { onToggleSelect(track) },
-                        onRename = { renameTarget = track },
-                        onDelete = { onRequestDelete(track) },
-                    )
+            // The same recents as the drawer's, so the two never disagree about what was last used.
+            if (recents.isNotEmpty()) {
+                Text(
+                    stringResource(R.string.section_recent),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                )
+                recents.forEachIndexed { index, track ->
+                    TrackRow(track = track, onClick = { onOpen(track) }, shaded = index % 2 == 1)
                 }
             }
+            TextButton(onClick = onShowLibrary, modifier = Modifier.align(Alignment.End)) {
+                Text(stringResource(R.string.library_all_tracks, library.size))
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.padding(start = 8.dp).size(18.dp),
+                )
+            }
         }
-    }
-
-    renameTarget?.let { target ->
-        LoopNameDialog(
-            title = stringResource(R.string.rename_track_title),
-            initial = target.name,
-            // Two imported files may legitimately share a name, so tracks aren't constrained.
-            taken = emptyList(),
-            onConfirm = { onRename(target, it); renameTarget = null },
-            onDismiss = { renameTarget = null },
-        )
     }
 }
 
@@ -1699,119 +1834,6 @@ private fun ChoiceRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
-}
-
-@Composable
-private fun LibraryRow(
-    track: LibraryTrack,
-    selected: Boolean,
-    selecting: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    onRename: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    var menu by remember { mutableStateOf(false) }
-    val haptic = LocalHapticFeedback.current
-    Surface(
-        shape = ControlShape,
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-        else MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(ControlShape)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = {
-                    // Confirm the grab in the hand — the gesture has no on-screen affordance.
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onLongClick()
-                },
-            ),
-    ) {
-        Row(
-            Modifier.padding(start = 12.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
-                Text(
-                    track.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                val loops = track.savedLoops.size
-                val loopCount = if (loops > 0) {
-                    pluralStringResource(R.plurals.track_loop_count, loops, loops)
-                } else {
-                    null
-                }
-                val info = buildList {
-                    if (track.durationMs > 0) add(formatMs(track.durationMs))
-                    if (loopCount != null) add(loopCount)
-                }.joinToString(" | ")
-                // Show the metadata on the left; when a custom title is set, put the original
-                // file name on the right (otherwise it would just repeat the label above).
-                if (info.isNotEmpty() || track.title != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            info,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (track.title != null) {
-                            Text(
-                                track.displayName,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.End,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                // Cap at half the row so a long file name truncates instead of
-                                // crowding out the metadata on the left.
-                                modifier = Modifier.weight(1f).padding(start = 8.dp),
-                            )
-                        }
-                    }
-                }
-            }
-            // While selecting, the row's own menu would compete with the selection's actions, so
-            // it gives way to a tick that says whether this track is in the batch.
-            if (selecting) {
-                Box(Modifier.padding(12.dp)) {
-                    Icon(
-                        if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = stringResource(
-                            if (selected) R.string.cd_selected else R.string.cd_not_selected,
-                        ),
-                        tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                Box {
-                    IconButton(onClick = { menu = true }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.cd_track_options),
-                        )
-                    }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_rename)) },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                            onClick = { menu = false; onRename() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_delete)) },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                            onClick = { menu = false; onDelete() },
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -3525,7 +3547,7 @@ private fun queryDisplayName(context: android.content.Context, uri: android.net.
         // "open with" from an older file manager gets here — the document picker always answers.
         ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
 
-private fun formatMs(ms: Long): String {
+internal fun formatMs(ms: Long): String {
     val totalSec = ms / 1000
     val m = totalSec / 60
     val s = totalSec % 60
