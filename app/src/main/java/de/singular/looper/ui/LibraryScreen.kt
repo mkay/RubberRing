@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -93,6 +95,7 @@ fun LibraryScreen(
     onToggleSelect: (LibraryTrack) -> Unit,
     onRename: (LibraryTrack) -> Unit,
     onDelete: (LibraryTrack) -> Unit,
+    onToggleStar: (LibraryTrack) -> Unit,
     modifier: Modifier = Modifier,
     returnTo: String? = null,
     onReturn: () -> Unit = {},
@@ -135,6 +138,7 @@ fun LibraryScreen(
                             onLongClick = { onToggleSelect(track) },
                             onRename = { onRename(track) },
                             onDelete = { onDelete(track) },
+                            onToggleStar = { onToggleStar(track) },
                         )
                     }
                 }
@@ -147,9 +151,10 @@ fun LibraryScreen(
  * One track as a flat row: its name, then its length and saved-loop count. Lists shade every other
  * row ([shaded]) rather than drawing dividers, which lets a long list read as a list.
  *
- * The home screen's recents pass only [onClick]; the library adds selection and the row's menu.
- * While selecting, the menu would compete with the selection's own actions, so it gives way to a
- * tick that says whether this track is in the batch.
+ * The home screen's recents pass only [onClick], and a starred track there shows its star as a
+ * mark; the library adds the star as a button, selection, and the row's menu. While selecting, the
+ * star and the menu would compete with the selection's own actions, so they give way to a tick that
+ * says whether this track is in the batch.
  */
 @Composable
 internal fun TrackRow(
@@ -162,6 +167,7 @@ internal fun TrackRow(
     onLongClick: (() -> Unit)? = null,
     onRename: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
+    onToggleStar: (() -> Unit)? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val colors = MaterialTheme.colorScheme
@@ -187,7 +193,7 @@ internal fun TrackRow(
                     }
                 },
             )
-            .padding(start = 16.dp, end = if (onRename != null || selecting) 4.dp else 16.dp),
+            .padding(start = 16.dp, end = if (onRename != null || selecting) 4.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
@@ -223,10 +229,43 @@ internal fun TrackRow(
                 )
             }
 
-            onRename != null && onDelete != null -> RowMenu(onRename, onDelete)
+            else -> {
+                if (onToggleStar != null) {
+                    StarButton(track.starred, onToggleStar)
+                } else if (track.starred) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = stringResource(R.string.cd_starred),
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                if (onRename != null && onDelete != null) RowMenu(onRename, onDelete)
+            }
         }
     }
 }
+
+/**
+ * A track's star as a button: filled in the brand colour when set, a faint outline when not — there
+ * on every row to be tapped, without every row shouting about it. From Title Track.
+ */
+@Composable
+private fun StarButton(starred: Boolean, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle) {
+        Icon(
+            if (starred) Icons.Default.Star else Icons.Outlined.StarOutline,
+            contentDescription = stringResource(
+                if (starred) R.string.cd_unstar else R.string.cd_star,
+            ),
+            tint = if (starred) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = UNSTARRED_ALPHA),
+        )
+    }
+}
+
+/** How faint an unset star's outline is. */
+private const val UNSTARRED_ALPHA = 0.30f
 
 @Composable
 private fun RowMenu(onRename: () -> Unit, onDelete: () -> Unit) {

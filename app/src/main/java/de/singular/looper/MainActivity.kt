@@ -84,6 +84,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -354,6 +355,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
     val library by viewModel.libraryTracks.collectAsStateWithLifecycle()
     val recents by viewModel.recentTracks.collectAsStateWithLifecycle()
     val librarySort by viewModel.librarySort.collectAsStateWithLifecycle()
+    val currentStarred by viewModel.currentStarred.collectAsStateWithLifecycle()
     var showHelp by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showSupport by remember { mutableStateOf(false) }
@@ -630,6 +632,19 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                                 )
                             }
                         }
+                        // The open track's star, in the bar's own colour like the icons beside it.
+                        if (state is LooperUiState.Loaded && !inLibrary && !selecting) {
+                            IconButton(onClick = viewModel::toggleCurrentStar) {
+                                Icon(
+                                    if (currentStarred) Icons.Default.Star
+                                    else Icons.Outlined.StarOutline,
+                                    contentDescription = stringResource(
+                                        if (currentStarred) R.string.cd_unstar
+                                        else R.string.cd_star,
+                                    ),
+                                )
+                            }
+                        }
                         // A quiet notice that the display is being kept awake (it drains battery);
                         // tap for an explanation and a shortcut to turn it off.
                         if (keepScreenOn && !selecting) {
@@ -668,6 +683,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                         },
                         onRename = { track -> renameTarget = track },
                         onDelete = { track -> pendingDelete = listOf(track) },
+                        onToggleStar = viewModel::toggleStar,
                         returnTo = returnTo,
                         onReturn = backToPlayer,
                         modifier = Modifier.padding(innerPadding),

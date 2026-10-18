@@ -220,6 +220,7 @@ class LibraryRepository(context: Context) {
                     importedAt = o.getLong("importedAt"),
                     durationMs = o.getLong("durationMs"),
                     lastOpenedAt = o.optLong("lastOpenedAt", 0L),
+                    starred = o.optBoolean("starred", false),
                     // Loop state is optional so records written before it existed still load.
                     startFrac = o.optDouble("startFrac", 0.0).toFloat(),
                     endFrac = o.optDouble("endFrac", 1.0).toFloat(),
@@ -300,6 +301,7 @@ class LibraryRepository(context: Context) {
                     .put("importedAt", t.importedAt)
                     .put("durationMs", t.durationMs)
                     .put("lastOpenedAt", t.lastOpenedAt)
+                    .put("starred", t.starred)
                     .put("startFrac", t.startFrac.toDouble())
                     .put("endFrac", t.endFrac.toDouble())
                     .put("bpm", t.bpm.toDouble())

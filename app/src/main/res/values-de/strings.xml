@@ -170,7 +170,7 @@
     <string name="sort_length">Länge</string>
     <string name="sort_added">Hinzugefügt</string>
     <string name="help_library_title">Einen Track finden</string>
-    <string name="help_library_body">Start zeigt deine zuletzt verwendeten Tracks; Alle Tracks öffnet die Bibliothek. Dort ziehst du die Liste nach unten, um nach Namen zu suchen, und mit dem Sortier-Knopf änderst du die Reihenfolge. Halte einen Track gedrückt, um mehrere auszuwählen und gemeinsam zu löschen.</string>
+    <string name="help_library_body">Start zeigt deine zuletzt verwendeten Tracks; Alle Tracks öffnet die Bibliothek. Dort ziehst du die Liste nach unten, um nach Namen zu suchen, und mit dem Sortier-Knopf änderst du die Reihenfolge. Tippe auf den Stern eines Tracks, um ihn oben zu halten. Halte einen Track gedrückt, um mehrere auszuwählen und gemeinsam zu löschen.</string>
     <string name="untitled_track">Ohne Titel</string>
     <string name="rename_track_title">Track umbenennen</string>
     <plurals name="track_loop_count">
@@ -178,6 +178,9 @@
         <item quantity="other">%d Loops</item>
     </plurals>
     <string name="cd_track_options">Track-Optionen</string>
+    <string name="cd_star">Track mit Stern markieren</string>
+    <string name="cd_unstar">Stern entfernen</string>
+    <string name="cd_starred">Mit Stern markiert</string>
     <string name="cd_selected">Ausgewählt</string>
     <string name="cd_not_selected">Nicht ausgewählt</string>
 

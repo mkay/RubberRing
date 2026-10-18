@@ -222,7 +222,7 @@
     <string name="sort_length">Length</string>
     <string name="sort_added">Date added</string>
     <string name="help_library_title">Find a track</string>
-    <string name="help_library_body">Home lists your most recent tracks; All tracks opens the library. There, pull the list down to search by name, and use the sort button for other orders. Long-press a track to select several and delete them together.</string>
+    <string name="help_library_body">Home lists your most recent tracks; All tracks opens the library. There, pull the list down to search by name, and use the sort button for other orders. Tap a track\'s star to keep it at the top. Long-press a track to select several and delete them together.</string>
     <!-- Stands in for the name of an imported file that arrived without one. -->
     <string name="untitled_track">Untitled</string>
     <string name="rename_track_title">Rename track</string>
@@ -231,6 +231,9 @@
         <item quantity="other">%d Loops</item>
     </plurals>
     <string name="cd_track_options">Track options</string>
+    <string name="cd_star">Star this track</string>
+    <string name="cd_unstar">Remove star</string>
+    <string name="cd_starred">Starred</string>
     <string name="cd_selected">Selected</string>
     <string name="cd_not_selected">Not selected</string>
 

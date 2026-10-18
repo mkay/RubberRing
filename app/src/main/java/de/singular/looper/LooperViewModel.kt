@@ -612,6 +612,14 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
 
     // The library track currently open, if any. Its loop state is kept in sync with the UI.
     private var currentTrack: LibraryTrack? = null
+        set(value) {
+            field = value
+            _currentStarred.value = value?.starred == true
+        }
+
+    // Whether the open track is starred, for the player's app bar.
+    private val _currentStarred = MutableStateFlow(false)
+    val currentStarred: StateFlow<Boolean> = _currentStarred.asStateFlow()
 
     init {
         refreshLibrary()
@@ -1601,10 +1609,37 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     /** Set (or clear, when blank) a track's custom display title, leaving its file untouched. */
     fun renameTrack(track: LibraryTrack, title: String) {
         val clean = title.trim().takeIf { it.isNotBlank() }
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { library.add(track.copy(title = clean)) }
-            refreshLibrary()
+        updateTrack(track.id) { it.copy(title = clean) }
+    }
+
+    /** Star or unstar a track; starred tracks are listed first in the Library. */
+    fun toggleStar(track: LibraryTrack) = updateTrack(track.id) { it.copy(starred = !it.starred) }
+
+    /** Star or unstar the open track, from the player's app bar. */
+    fun toggleCurrentStar() {
+        currentTrack?.let(::toggleStar)
+    }
+
+    /**
+     * Change one track's record and save it. The open track's is changed on [currentTrack], the
+     * live copy, which is ahead of the index: the Library can sit over the player, and a change
+     * made to the library's copy there would be undone by the open track's next save.
+     */
+    private fun updateTrack(id: String, change: (LibraryTrack) -> LibraryTrack) {
+        val open = currentTrack
+        if (open?.id == id) {
+            val changed = change(open)
+            currentTrack = changed.also { persistTrack(it) }
+            // The app bar, and whatever else names the open track, reads it from the state.
+            _state.value = when (val st = _state.value) {
+                is LooperUiState.Loaded -> st.copy(fileName = changed.name)
+                is LooperUiState.Loading -> st.copy(fileName = changed.name)
+                else -> st
+            }
+            return
         }
+        val track = _library.value.firstOrNull { it.id == id } ?: return
+        persistTrack(change(track))
     }
 
     override fun onCleared() {

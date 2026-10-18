@@ -12,6 +12,7 @@ class LibrarySortTest {
         importedAt: Long = 0,
         lastOpenedAt: Long = 0,
         durationMs: Long = 0,
+        starred: Boolean = false,
     ) = LibraryTrack(
         id = name,
         storedFileName = "$name.m4a",
@@ -19,6 +20,7 @@ class LibrarySortTest {
         importedAt = importedAt,
         durationMs = durationMs,
         lastOpenedAt = lastOpenedAt,
+        starred = starred,
     )
 
     @Test
@@ -52,5 +54,17 @@ class LibrarySortTest {
         assertEquals(LibrarySort.RECENT, LibrarySort.from(null))
         assertEquals(LibrarySort.RECENT, LibrarySort.from("SIZE"))
         assertEquals(LibrarySort.NAME, LibrarySort.from("NAME"))
+    }
+
+    @Test
+    fun `starred tracks come first in every order, each group in that order`() {
+        val a = track("a", importedAt = 1, durationMs = 300, starred = true)
+        val b = track("b", importedAt = 2, durationMs = 100)
+        val c = track("c", importedAt = 3, durationMs = 200, starred = true)
+        val d = track("d", importedAt = 4, durationMs = 400)
+        val all = listOf(d, b, a, c)
+        assertEquals(listOf(a, c, b, d), LibrarySort.NAME.sort(all))
+        assertEquals(listOf(c, a, b, d), LibrarySort.LENGTH.sort(all))
+        assertEquals(listOf(c, a, d, b), LibrarySort.ADDED.sort(all))
     }
 }

@@ -56,6 +56,8 @@ data class LibraryTrack(
     // each open (and benefit from detector improvements). Once the user corrects a chord, the whole
     // timeline is stored here and used verbatim on reopen, until they re-detect.
     val chords: List<ChordSpan> = emptyList(),
+    // Starred tracks are listed first in the Library, whatever its sort.
+    val starred: Boolean = false,
 ) {
     /** The name to show the user: the chosen [title] if set, otherwise the original file name. */
     val name: String get() = title?.takeIf { it.isNotBlank() } ?: displayName
