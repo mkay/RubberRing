@@ -1810,7 +1810,7 @@ private fun HomeContent(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 )
                 recents.forEachIndexed { index, track ->
-                    TrackRow(track = track, onClick = { onOpen(track) }, shaded = index % 2 == 1)
+                    TrackRow(track = track, onClick = { onOpen(track) }, shaded = index % 2 == 0)
                 }
             }
             TextButton(onClick = onShowLibrary, modifier = Modifier.align(Alignment.End)) {

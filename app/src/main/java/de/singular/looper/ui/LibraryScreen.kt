@@ -130,7 +130,7 @@ fun LibraryScreen(
                     itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
                         TrackRow(
                             track = track,
-                            shaded = index % 2 == 1,
+                            shaded = index % 2 == 0,
                             selected = track.id in selection,
                             selecting = selecting,
                             // While selecting, a tap picks rather than opens — one meaning per tap.
@@ -236,7 +236,7 @@ internal fun TrackRow(
                     Icon(
                         Icons.Default.Star,
                         contentDescription = stringResource(R.string.cd_starred),
-                        tint = colors.primary,
+                        tint = colors.onSurface,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -247,7 +247,7 @@ internal fun TrackRow(
 }
 
 /**
- * A track's star as a button: filled in the brand colour when set, a faint outline when not — there
+ * A track's star as a button: filled in the text colour when set, a faint outline when not — there
  * on every row to be tapped, without every row shouting about it. From Title Track.
  */
 @Composable
@@ -258,7 +258,7 @@ private fun StarButton(starred: Boolean, onToggle: () -> Unit) {
             contentDescription = stringResource(
                 if (starred) R.string.cd_unstar else R.string.cd_star,
             ),
-            tint = if (starred) MaterialTheme.colorScheme.primary
+            tint = if (starred) MaterialTheme.colorScheme.onSurface
             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = UNSTARRED_ALPHA),
         )
     }
