@@ -13,10 +13,10 @@ Early-stage release — expect rough edges. Feedback and bug reports welcome via
 
 ## Features
 
-- **Import-and-own library** — picked files are copied into app-private storage, so loops survive the original being moved or deleted. The library doubles as the home screen, with recents and custom, renameable track titles.
-- **Waveform loop editing** — drag start/end handles to mark a section; it decodes to PCM and loops via `AudioTrack` loop points, so the boundary wraps with zero audible gap or click.
+- **Import-and-own library** — picked files are copied into app-private storage, so loops survive the original being moved or deleted. Home lists your recent tracks; the Library screen lists them all, sorted by recency, name, length or date added, searchable by pulling the list down, with starred favourites kept at the top and renameable track titles. It opens over the player, so a track keeps playing while you browse.
+- **Waveform loop editing** — drag start/end handles to mark a section; it decodes to PCM in memory and a feeder thread streams it to an `AudioTrack`, wrapping at the loop end with no decode step in between, so the boundary has zero audible gap or click. A track too long for the phone's memory (about 15 minutes of stereo on a typical phone) is refused with a message naming the limit.
 - **Editable beat grid** — a dependency-free estimator finds BPM and a downbeat, and handles snap to the grid. Refine it by hand at any time: tap the tempo, nudge ±1 BPM, or halve/double it.
-- **Pitch-preserving speed** — slow down or speed up from 0.5× to 1.5× with a WSOLA time-stretch that keeps the original pitch.
+- **Pitch-preserving speed** — slow down or speed up from 0.5× to 1.5× with a WSOLA time-stretch that keeps the original pitch. The grain search runs ahead of playback and the stretched audio is built as it plays, so even a whole song at half speed costs little more memory than the song itself.
 - **Saved loops** — capture a region + grid per track, up to ten of them, and drag the chips into the order you practise them. Any of them exports as a WAV at the current speed.
 - **Practice arrangements** — chain saved loops into an ordered sequence, each repeated a set number of times and optionally looping the whole set — for drilling A–B–A transitions.
 - **English and German** — picked in Settings or followed from the device, stored as Android's own per-app language. Chords can optionally use German note names (H and B).
@@ -30,7 +30,7 @@ Early-stage release — expect rough edges. Feedback and bug reports welcome via
 - **Build:** Android Gradle Plugin 9.2.1 + Gradle 9.5.1 (via wrapper)
 - **SDK:** `minSdk` 26 · `compile`/`targetSdk` 36
 - **Decode:** `MediaExtractor` + `MediaCodec` → PCM
-- **Playback:** low-level `AudioTrack` with sample-accurate loop points
+- **Playback:** low-level `AudioTrack` in stream mode, fed by a background thread that wraps at the loop end
 - **Beat detection & time-stretch:** custom (WSOLA), no native/NDK or GPL dependencies
 - **Async:** Kotlin Coroutines + Flow
 
@@ -60,13 +60,18 @@ app/src/main/java/de/singular/looper/
     AudioDecoder.kt      file URI -> PCM + metadata
     LoopPlayer.kt        AudioTrack wrapper: loop points, play/pause/seek
     BeatDetector.kt      tempo + downbeat estimation
-    TimeStretch.kt       pitch-preserving WSOLA speed change
+    TimeStretch.kt       pitch-preserving WSOLA speed change, built as it plays
+    PcmSource.kt         PCM read a chunk at a time: the file as is, or stretched
     DecodedAudio.kt / WaveformData.kt   PCM + envelope models
   library/
     LibraryRepository.kt import-and-own storage + metadata index
     LibraryTrack.kt / SavedLoop.kt / ArrangementStep.kt
+    LibrarySort.kt       the Library's sort orders, starred tracks first
+    TrackQuery.kt        what a Library search matches
   ui/
     LoopWaveform.kt      waveform + grid + handle rendering
+    LibraryScreen.kt     the Library: rows, stars, search, sort
+    PullToReveal.kt      pull-down-to-search gesture
 ```
 
 ## Support

@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.14] - 2026-10-18
+
+### Added
+- A Library screen lists every track. Sort it by recently used, name, length or date added; the choice is remembered and kept in backups. Pull the list down to search: every word typed has to appear in the track's name or file name, in any order, ignoring case and accents. Rename, delete and long-press to select several now live here, and the + button imports.
+- Stars: tap a track's star in the Library, or in the player's app bar, to keep it at the top of the Library in every sort order.
+- Opened from the drawer while a track is loaded, the Library sits over the player and the track keeps playing. A strip at the top, or Back, returns to it as it was.
+
+### Changed
+- Home keeps the welcome block and lists the same recent tracks as the drawer, with All tracks leading to the Library. The drawer gains Home, which asks before closing an open track.
+- Import uses a + icon instead of a folder.
+
+### Fixed
+- Slowing down a long song could stutter and then crash by running out of memory (issue #7): at 0.5× a five-minute track needed more than the 256 MB a typical phone allows an app. The stretched audio is now built as it plays instead of into a buffer twice the size of the song, so a stretch costs little more than the track itself at any length and speed. Working it out takes about half as long, and the old speed keeps playing until the new one is ready.
+- Loading a track briefly needed up to twice its size in memory while the decoder grew and trimmed its buffer. It now decodes into one buffer sized from the file's duration.
+- A track too long for the phone's memory is refused when it is loaded, with a message giving the limit for that phone (about 15 minutes of stereo on a typical one), instead of failing later.
+
 ## [0.13] - 2026-10-12
 
 ### Added
@@ -163,7 +179,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.13...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.14...HEAD
+[0.14]: https://github.com/mkay/RubberRing/compare/v0.13...v0.14
 [0.13]: https://github.com/mkay/RubberRing/compare/v0.12...v0.13
 [0.12]: https://github.com/mkay/RubberRing/compare/v0.11...v0.12
 [0.11]: https://github.com/mkay/RubberRing/compare/v0.10...v0.11

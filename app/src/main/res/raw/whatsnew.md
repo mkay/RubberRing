@@ -9,8 +9,8 @@ what the dialog holds without scrolling. Don't write the version number here; th
 from the build.
 -->
 
-• Loop chips now toggle: tap the highlighted chip to switch its loop off. The markers return to the whole track and the waveform zooms out. Tap the chip again to bring the loop back.
+• New Library screen: sort your tracks, pull the list down to search, and star favourites to keep them at the top. Home now shows your recent tracks.
 
-• Slowing down a whole song now takes seconds instead of minutes.
+• Fixed a problem with slowing down long songs: playback could stutter and the app could crash. The slowed-down song is now also ready twice as fast.
 
-• Fixed a crash when switching loops while playing slower or faster than 1×. Changing speed or loop during playback now carries on from where it was instead of jumping back to the start.
+• Tracks too long for your phone's memory are now refused with a clear message.

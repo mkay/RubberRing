@@ -13,8 +13,8 @@ android {
         applicationId = "de.singular.looper"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.13"
+        versionCode = 15
+        versionName = "0.14"
     }
 
     buildTypes {

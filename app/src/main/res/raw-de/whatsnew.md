@@ -5,8 +5,8 @@ unverändert angezeigt; kurze Stichpunkte, etwa vier. Die Versionsnummer steht i
 gehört nicht hierher.
 -->
 
-• Loop-Chips schalten jetzt um: Den hervorgehobenen Chip antippen schaltet seinen Loop aus. Die Marker umfassen wieder den ganzen Titel, und die Wellenform zoomt heraus. Erneut tippen holt den Loop zurück.
+• Neue Bibliothek: Tracks sortieren, die Liste nach unten ziehen zum Suchen, und Favoriten mit einem Stern oben halten. Start zeigt jetzt deine zuletzt verwendeten Tracks.
 
-• Einen ganzen Titel zu verlangsamen dauert jetzt Sekunden statt Minuten.
+• Problem beim Verlangsamen langer Tracks behoben: Die Wiedergabe konnte stocken und die App abstürzen. Der verlangsamte Track ist jetzt außerdem doppelt so schnell bereit.
 
-• Absturz behoben beim Wechseln von Loops, während langsamer oder schneller als 1× gespielt wird. Tempo- oder Loop-Wechsel während der Wiedergabe spielen jetzt an der aktuellen Stelle weiter, statt zum Anfang zu springen.
+• Tracks, die zu lang für den Speicher deines Telefons sind, werden jetzt mit einer klaren Meldung abgelehnt.
