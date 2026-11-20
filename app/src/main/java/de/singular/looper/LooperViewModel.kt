@@ -1078,16 +1078,64 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         if (!_arrangementActive.value) applySavedLoop(restored)
     }
 
-    fun deleteLoop(id: String) {
-        val track = currentTrack ?: return
+    /**
+     * What [deleteLoop] took away, for [undoDeleteLoop] to put back: the loop and where it sat in
+     * the row, each arrangement step that played it with where that sat, and whether the arrangement
+     * was armed.
+     */
+    data class DeletedLoop(
+        val loop: SavedLoop,
+        val index: Int,
+        val steps: List<IndexedValue<ArrangementStep>>,
+        val arrangementActive: Boolean,
+    )
+
+    fun deleteLoop(id: String): DeletedLoop? {
+        val track = currentTrack ?: return null
+        val index = track.savedLoops.indexOfFirst { it.id == id }
+        if (index < 0) return null
+        val deleted = DeletedLoop(
+            loop = track.savedLoops[index],
+            index = index,
+            steps = track.arrangement.withIndex().filter { it.value.loopId == id },
+            arrangementActive = _arrangementActive.value,
+        )
         // Also drop any arrangement steps that pointed at this loop, so the sequence stays valid.
         val remaining = track.savedLoops.filterNot { it.id == id }
         val arr = track.arrangement.filterNot { it.loopId == id }
         val active = if (arr.isEmpty()) false else _arrangementActive.value
-        val updated = track.copy(savedLoops = remaining, arrangement = arr, arrangementActive = active)
+        setLoopsAndArrangement(track, remaining, arr, active)
+        return deleted
+    }
+
+    /**
+     * Undo a [deleteLoop]. Puts the loop and its steps back where they were, into the row and the
+     * arrangement as they now stand rather than as a snapshot, so a change made in between survives.
+     * Does nothing if the track has since filled up to [MAX_SAVED_LOOPS] or holds the loop again.
+     */
+    fun undoDeleteLoop(deleted: DeletedLoop) {
+        val track = currentTrack ?: return
+        if (track.savedLoops.any { it.id == deleted.loop.id }) return
+        if (track.savedLoops.size >= MAX_SAVED_LOOPS) return
+        val loops = track.savedLoops.toMutableList()
+            .apply { add(deleted.index.coerceAtMost(size), deleted.loop) }
+        // Ascending, so each step goes back in front of the ones that followed it.
+        val arr = track.arrangement.toMutableList()
+        deleted.steps.forEach { (i, step) -> arr.add(i.coerceAtMost(arr.size), step) }
+        val active = deleted.arrangementActive && arr.isNotEmpty()
+        setLoopsAndArrangement(track, loops, arr, active)
+    }
+
+    private fun setLoopsAndArrangement(
+        track: LibraryTrack,
+        loops: List<SavedLoop>,
+        arrangement: List<ArrangementStep>,
+        active: Boolean,
+    ) {
+        val updated = track.copy(savedLoops = loops, arrangement = arrangement, arrangementActive = active)
         currentTrack = updated
-        _savedLoops.value = remaining
-        _arrangement.value = arr
+        _savedLoops.value = loops
+        _arrangement.value = arrangement
         _arrangementActive.value = active
         persistTrack(updated)
     }

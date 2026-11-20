@@ -202,6 +202,7 @@ import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.IntentCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -221,6 +222,7 @@ import de.singular.looper.library.SavedLoop
 import de.singular.looper.ui.LoopWaveform
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 // Brand colour used for buttons, chips, and the marker accents.
 private val BrandPrimary = Color(0xFFA62120)
@@ -295,6 +297,9 @@ private fun ToastSnackbar(data: SnackbarData) {
         }
     }
 }
+
+// How long an Undo stays on offer after replacing or deleting a loop.
+private const val UNDO_TIMEOUT_MS = 6_000L
 
 // Controls use a gentle 5px corner rather than the fully-rounded Material default.
 private val ControlShape = RoundedCornerShape(5.dp)
@@ -1993,23 +1998,44 @@ private fun LoadedContent(
         Toast.makeText(context, loopLimitMessage, Toast.LENGTH_SHORT).show()
     }
 
-    // Replacing a loop overwrites what it held, so the snackbar offers the old span back. A newer
-    // replace dismisses the one before: only the latest is undoable, which is what the row shows.
-    val replaceScope = rememberCoroutineScope()
-    val replacedMessage = stringResource(R.string.loop_replaced)
+    // Replacing or deleting a loop loses what it held, so a snackbar offers it back. A newer one
+    // dismisses the one before: only the latest change is undoable.
+    // Material's Short (4s) is too quick to notice a slip and reach for Undo, and Long (10s) leaves
+    // the pill over the beat controls for too long, so it is shown indefinitely and timed out here.
+    // Cancelling showSnackbar takes the pill down. The accessibility manager stretches the time for
+    // anyone who has asked Android for longer to act.
+    val undoScope = rememberCoroutineScope()
     val undoLabel = stringResource(R.string.action_undo)
-    val replaceLoop: (SavedLoop) -> Unit = { loop ->
-        val old = viewModel.replaceLoopWithSelection(loop.id)
-        if (old != null) {
-            snackbarHostState.currentSnackbarData?.dismiss()
-            replaceScope.launch {
-                val result = snackbarHostState.showSnackbar(
-                    message = replacedMessage.format(loop.label),
+    val accessibility = LocalAccessibilityManager.current
+    val offerUndo: (String, () -> Unit) -> Unit = { message, undo ->
+        snackbarHostState.currentSnackbarData?.dismiss()
+        val timeout = accessibility?.calculateRecommendedTimeoutMillis(
+            UNDO_TIMEOUT_MS,
+            containsIcons = true,
+            containsText = true,
+            containsControls = true,
+        ) ?: UNDO_TIMEOUT_MS
+        undoScope.launch {
+            val result = withTimeoutOrNull(timeout) {
+                snackbarHostState.showSnackbar(
+                    message = message,
                     actionLabel = undoLabel,
-                    duration = SnackbarDuration.Short,
+                    duration = SnackbarDuration.Indefinite,
                 )
-                if (result == SnackbarResult.ActionPerformed) viewModel.restoreLoop(old)
             }
+            if (result == SnackbarResult.ActionPerformed) undo()
+        }
+    }
+    val replacedMessage = stringResource(R.string.loop_replaced)
+    val replaceLoop: (SavedLoop) -> Unit = { loop ->
+        viewModel.replaceLoopWithSelection(loop.id)?.let { old ->
+            offerUndo(replacedMessage.format(loop.label)) { viewModel.restoreLoop(old) }
+        }
+    }
+    val deletedMessage = stringResource(R.string.loop_deleted)
+    val deleteLoop: (String) -> Unit = { id ->
+        viewModel.deleteLoop(id)?.let { deleted ->
+            offerUndo(deletedMessage.format(deleted.loop.label)) { viewModel.undoDeleteLoop(deleted) }
         }
     }
 
@@ -2280,7 +2306,7 @@ private fun LoadedContent(
             onSave = viewModel::saveCurrentLoop,
             onRename = viewModel::renameLoop,
             onReplace = replaceLoop,
-            onDelete = viewModel::deleteLoop,
+            onDelete = deleteLoop,
             onExport = { loop ->
                 exportLoopId = loop.id
                 loopExportLauncher.launch(viewModel.loopExportFileName(loop))
@@ -2950,12 +2976,13 @@ private fun LoopChip(
                 )
             }
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.action_delete)) },
-                onClick = { menu = false; onDelete() },
-            )
-            DropdownMenuItem(
                 text = { Text(stringResource(R.string.action_export_wav)) },
                 onClick = { menu = false; onExport() },
+            )
+            // Last, away from the everyday items, so a slip from Rename or Replace doesn't land on it.
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.action_delete)) },
+                onClick = { menu = false; onDelete() },
             )
         }
     }

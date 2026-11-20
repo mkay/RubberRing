@@ -50,6 +50,7 @@
     <string name="action_export_wav">Als WAV exportieren</string>
     <string name="action_replace_with_selection">Durch Auswahl ersetzen</string>
     <string name="loop_replaced">„%1$s“ ersetzt</string>
+    <string name="loop_deleted">„%1$s“ gelöscht</string>
     <string name="action_undo">Rückgängig</string>
 
     <string name="restore_confirm_title">Sicherung wiederherstellen?</string>
