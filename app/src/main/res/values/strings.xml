@@ -263,7 +263,7 @@
     <!-- Default name for a newly saved loop; %1$d counts up from 1. -->
     <string name="loop_default_name">Loop %1$d</string>
     <!-- Arrange here is the button named by cd_arrange; keep the two matching. -->
-    <string name="toast_arrange_locked">Turn off Arrange to use this</string>
+    <string name="toast_arrange_locked">Turn off Arrange first</string>
     <!-- Shown when Save is tapped on a track that already holds the maximum; %1$d is that maximum. -->
     <string name="toast_loop_limit">%1$d loops per track is the limit — delete one to save another</string>
 
