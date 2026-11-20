@@ -110,6 +110,11 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -195,6 +200,8 @@ import kotlinx.coroutines.flow.first
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.IntentCompat
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -231,6 +238,63 @@ private val LooperLightColors = lightColorScheme(
     secondaryContainer = BrandPrimary,
     onSecondaryContainer = Color(0xFFFFFFFF),
 )
+
+/**
+ * A snackbar drawn as the system toast is, so a notice that needs an action (Undo) doesn't look
+ * like it came from another app than the toasts around it: a centred white pill with the app icon,
+ * raised off the bottom edge to where a toast floats. Always light, like the toasts on the phones
+ * it was matched against — they stay white in a dark app and a dark system alike. Sizes are taken
+ * from a toast on a Fairphone 6.
+ */
+@Composable
+private fun ToastSnackbar(data: SnackbarData) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // The launcher icon as the system masks it, which is exactly what a toast shows.
+    val icon = remember {
+        context.packageManager.getApplicationIcon(context.packageName).toBitmap().asImageBitmap()
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 24.dp, end = 24.dp, bottom = 48.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(percent = 50),
+            color = Color.White,
+            contentColor = Color(0xFF1F1F1F),
+            shadowElevation = 4.dp,
+        ) {
+            Row(
+                Modifier.padding(start = 16.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    data.visuals.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(vertical = 11.dp),
+                )
+                // A plain text action rather than a TextButton, whose 40dp minimum height would
+                // make the pill taller than the toasts it is meant to sit among.
+                data.visuals.actionLabel?.let { label ->
+                    Text(
+                        label,
+                        color = BrandPrimary,
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 16.sp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(percent = 50))
+                            .clickable { data.performAction() }
+                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                    )
+                }
+            }
+        }
+    }
+}
 
 // Controls use a gentle 5px corner rather than the fully-rounded Material default.
 private val ControlShape = RoundedCornerShape(5.dp)
@@ -381,6 +445,9 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
     val context = androidx.compose.ui.platform.LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    // The one snackbar host on the main screen, for notices that carry an action (Undo); plain
+    // notices stay toasts.
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Hold the screen awake while the option is on; always release it when leaving the composition.
     val view = androidx.compose.ui.platform.LocalView.current
@@ -669,6 +736,9 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                     },
                 )
             },
+            snackbarHost = {
+                SnackbarHost(snackbarHostState) { data -> ToastSnackbar(data) }
+            },
         ) { innerPadding ->
             // The Library, as the screen under no track or over an open one. [onOpen] is the one
             // thing that differs, and [returnTo] names the track there is to go back to.
@@ -736,7 +806,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                             Text(stringResource(R.string.state_decoding))
                         }
 
-                        is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel)
+                        is LooperUiState.Loaded -> LoadedContent(s.audio, viewModel, snackbarHostState)
 
                         is LooperUiState.Error -> Text(
                             stringResource(R.string.error_format, stringResource(s.message)),
@@ -1869,7 +1939,11 @@ private fun ChoiceRow(
 }
 
 @Composable
-private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
+private fun LoadedContent(
+    audio: DecodedAudio,
+    viewModel: LooperViewModel,
+    snackbarHostState: SnackbarHostState,
+) {
     val region by viewModel.region.collectAsStateWithLifecycle()
     val playhead by viewModel.playhead.collectAsStateWithLifecycle()
     val grid by viewModel.grid.collectAsStateWithLifecycle()
@@ -1917,6 +1991,26 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
     val loopLimitMessage = stringResource(R.string.toast_loop_limit, MAX_SAVED_LOOPS)
     val notifyLoopLimit: () -> Unit = {
         Toast.makeText(context, loopLimitMessage, Toast.LENGTH_SHORT).show()
+    }
+
+    // Replacing a loop overwrites what it held, so the snackbar offers the old span back. A newer
+    // replace dismisses the one before: only the latest is undoable, which is what the row shows.
+    val replaceScope = rememberCoroutineScope()
+    val replacedMessage = stringResource(R.string.loop_replaced)
+    val undoLabel = stringResource(R.string.action_undo)
+    val replaceLoop: (SavedLoop) -> Unit = { loop ->
+        val old = viewModel.replaceLoopWithSelection(loop.id)
+        if (old != null) {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            replaceScope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = replacedMessage.format(loop.label),
+                    actionLabel = undoLabel,
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) viewModel.restoreLoop(old)
+            }
+        }
     }
 
     // Export a saved loop as a WAV wherever the user points. The loop's id is kept saveable so the
@@ -2173,6 +2267,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
         LoopChips(
             loops = loops,
             region = region,
+            grid = grid,
             atLimit = loops.size >= MAX_SAVED_LOOPS,
             onLimit = notifyLoopLimit,
             canArrange = loops.isNotEmpty(),
@@ -2184,6 +2279,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
             onReset = viewModel::resetRegion,
             onSave = viewModel::saveCurrentLoop,
             onRename = viewModel::renameLoop,
+            onReplace = replaceLoop,
             onDelete = viewModel::deleteLoop,
             onExport = { loop ->
                 exportLoopId = loop.id
@@ -2261,6 +2357,7 @@ private fun LoadedContent(audio: DecodedAudio, viewModel: LooperViewModel) {
 private fun LoopChips(
     loops: List<SavedLoop>,
     region: LoopRegion,
+    grid: BeatGridState,
     atLimit: Boolean,
     onLimit: () -> Unit,
     canArrange: Boolean,
@@ -2272,6 +2369,7 @@ private fun LoopChips(
     onReset: () -> Unit,
     onSave: (String) -> Unit,
     onRename: (String, String) -> Unit,
+    onReplace: (SavedLoop) -> Unit,
     onDelete: (String) -> Unit,
     onExport: (SavedLoop) -> Unit,
     onReorder: (List<String>) -> Unit,
@@ -2292,6 +2390,13 @@ private fun LoopChips(
 
     val selectedId = loops.firstOrNull {
         abs(it.startFrac - region.startFrac) < 1e-3f && abs(it.endFrac - region.endFrac) < 1e-3f
+    }?.id
+    // Highlighting goes by the markers alone, but a loop also holds its grid, so the selected loop
+    // can still differ from what's on screen. Only when both match has replacing nothing to do.
+    val unchangedId = loops.firstOrNull { it.id == selectedId }?.takeIf {
+        abs(it.bpm - grid.bpm) < 1e-3f &&
+            abs(it.downbeatFrac - grid.downbeatFrac) < 1e-6f &&
+            it.snap == grid.enabled
     }?.id
 
     LaunchedEffect(loops) {
@@ -2456,6 +2561,7 @@ private fun LoopChips(
                     loop = loop,
                     // Highlight the loop whose span matches the current markers.
                     selected = loop.id == selectedId,
+                    replaceable = loop.id != unchangedId,
                     locked = locked,
                     dragging = loop.id == dragId,
                     dragOffset = if (loop.id == dragId) dragOffset else 0f,
@@ -2493,6 +2599,7 @@ private fun LoopChips(
                     // track, so a new loop needn't start from an old one's bounds.
                     onApply = { if (loop.id == selectedId) onReset() else onApply(loop) },
                     onRename = { renameTarget = loop },
+                    onReplace = { onReplace(loop) },
                     onDelete = { onDelete(loop.id) },
                     onExport = { onExport(loop) },
                 )
@@ -2745,10 +2852,12 @@ private fun PinnedLoopAction(
 private fun LoopChip(
     loop: SavedLoop,
     selected: Boolean,
+    replaceable: Boolean,
     locked: Boolean,
     onLocked: () -> Unit,
     onApply: () -> Unit,
     onRename: () -> Unit,
+    onReplace: () -> Unit,
     onDelete: () -> Unit,
     onExport: () -> Unit,
     dragging: Boolean = false,
@@ -2832,6 +2941,14 @@ private fun LoopChip(
                 text = { Text(stringResource(R.string.action_rename)) },
                 onClick = { menu = false; onRename() },
             )
+            // Re-aims the loop at the markers as they stand, for adjusting a loop without saving a
+            // second one. Left out when the markers and grid already are the loop.
+            if (replaceable) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_replace_with_selection)) },
+                    onClick = { menu = false; onReplace() },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.action_delete)) },
                 onClick = { menu = false; onDelete() },

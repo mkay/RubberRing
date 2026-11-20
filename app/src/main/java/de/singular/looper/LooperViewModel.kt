@@ -1043,6 +1043,41 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
         updateLoops(track.savedLoops.map { if (it.id == id) it.copy(label = name) else it })
     }
 
+    /**
+     * Point the saved loop [id] at the current markers and grid, keeping its name, its place in the
+     * row and — since the id stays — every arrangement step that plays it. Returns the loop as it
+     * was, for [restoreLoop] to put back, or null if there was nothing to replace.
+     */
+    fun replaceLoopWithSelection(id: String): SavedLoop? {
+        val track = currentTrack ?: return null
+        val old = track.savedLoops.firstOrNull { it.id == id } ?: return null
+        val r = _region.value
+        val g = _grid.value
+        val new = old.copy(
+            startFrac = r.startFrac,
+            endFrac = r.endFrac,
+            bpm = g.bpm,
+            downbeatFrac = g.downbeatFrac,
+            snap = g.enabled,
+        )
+        updateLoops(track.savedLoops.map { if (it.id == id) new else it })
+        return old
+    }
+
+    /**
+     * Undo a [replaceLoopWithSelection]: put [loop]'s span and grid back, matched by id, and recall
+     * it, so the markers show what was restored and its chip stays the active one. The label is
+     * left as it now stands, so a rename made in between survives. A loop deleted meanwhile stays
+     * deleted, and while the arrangement is armed the markers are left alone, as a chip tap would.
+     */
+    fun restoreLoop(loop: SavedLoop) {
+        val track = currentTrack ?: return
+        val current = track.savedLoops.firstOrNull { it.id == loop.id } ?: return
+        val restored = loop.copy(label = current.label)
+        updateLoops(track.savedLoops.map { if (it.id == loop.id) restored else it })
+        if (!_arrangementActive.value) applySavedLoop(restored)
+    }
+
     fun deleteLoop(id: String) {
         val track = currentTrack ?: return
         // Also drop any arrangement steps that pointed at this loop, so the sequence stays valid.

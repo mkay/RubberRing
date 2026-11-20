@@ -48,6 +48,9 @@
     <string name="loop_exported">Loop exportiert</string>
     <string name="loop_export_failed">Export fehlgeschlagen — prüfe das Ziel und versuche es noch einmal</string>
     <string name="action_export_wav">Als WAV exportieren</string>
+    <string name="action_replace_with_selection">Durch Auswahl ersetzen</string>
+    <string name="loop_replaced">„%1$s“ ersetzt</string>
+    <string name="action_undo">Rückgängig</string>
 
     <string name="restore_confirm_title">Sicherung wiederherstellen?</string>
     <string name="restore_confirm_body">Das ersetzt deine gesamte aktuelle Bibliothek — alle importierten Tracks und gespeicherten Loops — durch den Inhalt der Sicherung. Das lässt sich nicht rückgängig machen.</string>
