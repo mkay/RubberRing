@@ -9,8 +9,8 @@ what the dialog holds without scrolling. Don't write the version number here; th
 from the build.
 -->
 
-• New Library screen: sort your tracks, pull the list down to search, and star favourites to keep them at the top. Home now shows your recent tracks.
+• Set beat one: if the click accents the wrong beat, put the start marker on beat one, tap the BPM and choose "Align grid to start marker". Beat one is now drawn bold on the grid.
 
-• Fixed a problem with slowing down long songs: playback could stutter and the app could crash. The slowed-down song is now also ready twice as fast.
+• Long-press a saved loop to replace it with the current selection. Replacing or deleting a loop can be undone.
 
-• Tracks too long for your phone's memory are now refused with a clear message.
+• Long-press a recent track to remove it from the list. It stays in your Library.

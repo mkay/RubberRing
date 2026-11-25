@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.15] - 2026-11-25
+
+### Added
+- Set beat one of the bar (issue #8). The beat detector finds where the beats fall but not where the bar starts, so the click's accent could land on the wrong beat. Tap the BPM and choose Align grid to start marker to make the start marker beat one, or move it a beat earlier or later. With Snap off, aligning also moves the grid lines to the marker, and the chord lane follows. Beat one of each bar is now drawn as the boldest grid line.
+- Replace a saved loop with the current selection: long-press its chip. The loop keeps its name, its place in the row and its arrangement steps. Undo puts the old region and grid back.
+- Deleting a saved loop can be undone, including the arrangement steps that played it.
+- Remove a track from Recent: long-press it on Home or in the drawer. It stays in the Library and returns to the list the next time it is opened.
+
+### Changed
+- Delete is now last in a loop chip's menu, away from Rename and Replace.
+- The notice for controls locked by Arrange is shorter: "Turn off Arrange first".
+
 ## [0.14] - 2026-10-18
 
 ### Added
@@ -180,7 +192,8 @@ Maintenance release: identical features to 0.3, rebuilt with clean release hygie
 - Multiple named saved loops per track; custom, renameable track titles.
 - Follow-playhead auto-scroll, keep-screen-on, and an in-app quick-help sheet.
 
-[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.14...HEAD
+[Unreleased]: https://github.com/mkay/RubberRing/compare/v0.15...HEAD
+[0.15]: https://github.com/mkay/RubberRing/compare/v0.14...v0.15
 [0.14]: https://github.com/mkay/RubberRing/compare/v0.13...v0.14
 [0.13]: https://github.com/mkay/RubberRing/compare/v0.12...v0.13
 [0.12]: https://github.com/mkay/RubberRing/compare/v0.11...v0.12

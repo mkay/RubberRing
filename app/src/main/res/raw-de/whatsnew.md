@@ -5,8 +5,8 @@ unverändert angezeigt; kurze Stichpunkte, etwa vier. Die Versionsnummer steht i
 gehört nicht hierher.
 -->
 
-• Neue Bibliothek: Tracks sortieren, die Liste nach unten ziehen zum Suchen, und Favoriten mit einem Stern oben halten. Start zeigt jetzt deine zuletzt verwendeten Tracks.
+• „Die Eins“ setzen: Betont der Klick den falschen Schlag, setze den Startmarker auf die Eins, tippe auf die BPM-Anzeige und wähle „Raster am Startmarker ausrichten“. Die Eins ist im Raster jetzt kräftiger gezeichnet.
 
-• Problem beim Verlangsamen langer Tracks behoben: Die Wiedergabe konnte stocken und die App abstürzen. Der verlangsamte Track ist jetzt außerdem doppelt so schnell bereit.
+• Halte einen gespeicherten Loop gedrückt, um ihn durch die aktuelle Auswahl zu ersetzen. Ersetzen und Löschen lassen sich rückgängig machen.
 
-• Tracks, die zu lang für den Speicher deines Telefons sind, werden jetzt mit einer klaren Meldung abgelehnt.
+• Halte einen zuletzt verwendeten Track gedrückt, um ihn aus der Liste zu entfernen. In der Bibliothek bleibt er erhalten.

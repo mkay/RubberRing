@@ -1,0 +1,3 @@
+• Set beat one: if the click accents the wrong beat, put the start marker on beat one, tap the BPM and choose "Align grid to start marker". Beat one is now drawn bold on the grid.
+• Long-press a saved loop to replace it with the current selection. Replacing or deleting a loop can be undone.
+• Long-press a recent track to remove it from the list.
