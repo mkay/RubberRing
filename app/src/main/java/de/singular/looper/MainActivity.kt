@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -124,6 +125,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -637,6 +639,8 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                 },
                 onSupport = { closeThen { showSupport = true } },
                 onOpenRecent = { track -> closeThen { viewModel.open(track) } },
+                onRemoveRecent = viewModel::removeFromRecents,
+                open = drawerState.targetValue == DrawerValue.Open,
                 onQuickHelp = { closeThen { showHelp = true } },
             )
         },
@@ -782,6 +786,7 @@ fun LooperScreen(viewModel: LooperViewModel = viewModel(), handedOverLaunch: Boo
                         recents = recents,
                         onImport = { openPicker() },
                         onOpen = viewModel::open,
+                        onRemoveRecent = viewModel::removeFromRecents,
                         onShowLibrary = { libraryOpen = true },
                         modifier = Modifier.padding(innerPadding),
                     )
@@ -1388,6 +1393,8 @@ private fun LooperDrawer(
     onSettings: () -> Unit,
     onSupport: () -> Unit,
     onOpenRecent: (LibraryTrack) -> Unit,
+    onRemoveRecent: (LibraryTrack) -> Unit,
+    open: Boolean,
     onQuickHelp: () -> Unit,
 ) {
     // Take 4/5 of the screen width, leaving a strip of dimmed scrim on the right to tap-to-close.
@@ -1447,16 +1454,25 @@ private fun LooperDrawer(
 
             if (recents.isNotEmpty()) {
                 DrawerSectionLabel(stringResource(R.string.section_recent))
+                // At most one row offers removal at a time, and the offer is gone when the drawer
+                // next opens.
+                var armed by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(open) { if (!open) armed = null }
                 recents.forEach { track ->
-                    NavigationDrawerItem(
-                        label = {
-                            Text(track.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        },
-                        icon = { Icon(Icons.Default.GraphicEq, contentDescription = null) },
-                        selected = false,
-                        onClick = { onOpenRecent(track) },
-                        modifier = itemPadding,
-                    )
+                    key(track.id) {
+                        DrawerRecentItem(
+                            name = track.name,
+                            armed = armed == track.id,
+                            onClick = { onOpenRecent(track) },
+                            onArm = { armed = track.id },
+                            onRemove = {
+                                armed = null
+                                onRemoveRecent(track)
+                            },
+                            onCancel = { armed = null },
+                            modifier = itemPadding,
+                        )
+                    }
                 }
             }
 
@@ -1470,6 +1486,85 @@ private fun LooperDrawer(
                 onClick = onQuickHelp,
                 modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding).padding(bottom = 8.dp),
             )
+        }
+    }
+}
+
+/**
+ * A recent track in the drawer. It looks like the drawer's other entries, but [NavigationDrawerItem]
+ * takes no long-press, which is how a recent is taken off the list. While [armed] the row is
+ * covered by the removal offer.
+ */
+@Composable
+private fun DrawerRecentItem(
+    name: String,
+    armed: Boolean,
+    onClick: () -> Unit,
+    onArm: () -> Unit,
+    onRemove: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    Box(modifier.height(56.dp).clip(CircleShape)) {
+        Row(
+            Modifier
+                .fillMaxSize()
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onArm()
+                    },
+                )
+                .padding(start = 16.dp, end = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.GraphicEq,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (armed) RecentRemoveOverlay(onRemove, onCancel, Modifier.matchParentSize())
+    }
+}
+
+/**
+ * What a long-pressed recent turns into, on home and in the drawer: the row itself becomes the
+ * choice, so the offer can't be missed the way a small menu beside it was. Removing only takes the
+ * track off the list until it is next opened; it stays in the library with its loops, so there is
+ * no Undo.
+ */
+@Composable
+private fun RecentRemoveOverlay(
+    onRemove: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Remove takes whatever Cancel leaves: the drawer is narrow, and the German label is long.
+        TextButton(onClick = onRemove, modifier = Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.menu_remove_from_recent),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        VerticalDivider(Modifier.height(24.dp))
+        TextButton(onClick = onCancel, modifier = Modifier.padding(horizontal = 4.dp)) {
+            Text(stringResource(R.string.action_cancel), maxLines = 1)
         }
     }
 }
@@ -1831,6 +1926,7 @@ private fun HomeContent(
     recents: List<LibraryTrack>,
     onImport: () -> Unit,
     onOpen: (LibraryTrack) -> Unit,
+    onRemoveRecent: (LibraryTrack) -> Unit,
     onShowLibrary: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1902,8 +1998,29 @@ private fun HomeContent(
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 )
+                // At most one row offers removal at a time; long-pressing another moves the offer.
+                var armed by remember { mutableStateOf<String?>(null) }
                 recents.forEachIndexed { index, track ->
-                    TrackRow(track = track, onClick = { onOpen(track) }, shaded = index % 2 == 0)
+                    key(track.id) {
+                        Box {
+                            TrackRow(
+                                track = track,
+                                onClick = { onOpen(track) },
+                                shaded = index % 2 == 0,
+                                onLongClick = { armed = track.id },
+                            )
+                            if (armed == track.id) {
+                                RecentRemoveOverlay(
+                                    onRemove = {
+                                        armed = null
+                                        onRemoveRecent(track)
+                                    },
+                                    onCancel = { armed = null },
+                                    modifier = Modifier.matchParentSize(),
+                                )
+                            }
+                        }
+                    }
                 }
             }
             TextButton(onClick = onShowLibrary, modifier = Modifier.align(Alignment.End)) {

@@ -1748,6 +1748,12 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
     /** Star or unstar a track; starred tracks are listed first in the Library. */
     fun toggleStar(track: LibraryTrack) = updateTrack(track.id) { it.copy(starred = !it.starred) }
 
+    /**
+     * Take [track] off the Recent list, on home and in the drawer. Only the open time is cleared, so
+     * the track keeps everything else and comes back to the list the next time it is opened.
+     */
+    fun removeFromRecents(track: LibraryTrack) = updateTrack(track.id) { it.copy(lastOpenedAt = 0L) }
+
     /** Star or unstar the open track, from the player's app bar. */
     fun toggleCurrentStar() {
         currentTrack?.let(::toggleStar)

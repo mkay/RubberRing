@@ -171,6 +171,8 @@
     <string name="drawer_support">Support Rubber Ring</string>
     <string name="drawer_quick_help">Quick help</string>
     <string name="section_recent">Recent</string>
+    <!-- Takes a track off the Recent list only; it stays in the library. -->
+    <string name="menu_remove_from_recent">Remove from Recent</string>
 
     <!-- ===== Support dialog ===== -->
 

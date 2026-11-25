@@ -123,6 +123,7 @@
     <string name="drawer_support">Rubber Ring unterstützen</string>
     <string name="drawer_quick_help">Kurzhilfe</string>
     <string name="section_recent">Zuletzt</string>
+    <string name="menu_remove_from_recent">Aus „Zuletzt“ entfernen</string>
 
     <string name="support_title">Die App am Leben erhalten</string>
     <string name="support_intro">Diese App trackt nicht. Gar nicht.\nDer Nachteil: Ich habe keine Ahnung, ob und wie oft sie benutzt oder heruntergeladen wird.\nKönnte null sein, es könnten bereits Tattoos davon existieren. Ich weiß es nicht.</string>
