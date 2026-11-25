@@ -200,6 +200,8 @@
     <string name="help_playhead_body">Tap anywhere in open space to jump the playhead there, or drag near the playhead line to scrub it.</string>
     <string name="help_countin_title">Start with a count-in</string>
     <string name="help_countin_body">Long-press Play to hear a count-in before the audio comes in; a normal tap starts straight away. Under Options → Click, set its meter and length, keep the click going through the loop, and pick its volume and pitch.</string>
+    <string name="help_beat_one_title">Set beat one</string>
+    <string name="help_beat_one_body">The boldest grid line is beat one, where the click is accented. If it sits on the wrong beat, put the start marker on the beat you hear as one, tap the BPM and choose Align grid to start marker. A beat earlier and A beat later move it one beat at a time.</string>
     <string name="help_zoom_title">Zoom &amp; scroll</string>
     <string name="help_zoom_body">Pinch with two fingers to zoom the waveform in and out. When zoomed in, drag in open space to scroll, or use the minimap strip at the bottom.</string>
     <string name="help_save_loop_title">Save a loop</string>
@@ -291,6 +293,10 @@
     <string name="bpm_value">%1$d BPM</string>
     <string name="menu_double_tempo">Double tempo</string>
     <string name="menu_halve_tempo">Halve tempo</string>
+    <!-- Beat one = the first beat of the bar, where the click is accented. -->
+    <string name="menu_align_grid">Align grid to start marker</string>
+    <string name="menu_beat_one_earlier">Beat one: a beat earlier</string>
+    <string name="menu_beat_one_later">Beat one: a beat later</string>
     <!-- Playback speed. %1$s is a multiplier like 0.8; × is the multiplication sign. -->
     <string name="speed_label">Speed %1$s×</string>
     <!-- The same, inside the slider popup. The double space is deliberate spacing. -->

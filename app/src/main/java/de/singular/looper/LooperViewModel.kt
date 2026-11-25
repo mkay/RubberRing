@@ -22,6 +22,7 @@ import de.singular.looper.audio.ClickTrack
 import de.singular.looper.audio.DecodedAudio
 import de.singular.looper.audio.DetectMode
 import de.singular.looper.audio.Gain
+import de.singular.looper.audio.GridAlign
 import de.singular.looper.audio.LoopPlayer
 import de.singular.looper.audio.NormalizeMode
 import de.singular.looper.audio.NoteNaming
@@ -1443,6 +1444,55 @@ class LooperViewModel(app: Application) : AndroidViewModel(app) {
             enabled = true,
         )
         resnapRegion()
+    }
+
+    /** One beat as a fraction of the open file, or 0 if there is no usable tempo. */
+    private fun beatFrac(): Float {
+        val dur = durationMs() ?: return 0f
+        val bpm = _grid.value.bpm
+        if (bpm <= 0f || dur <= 0) return 0f
+        return (60_000.0 / bpm / dur).toFloat()
+    }
+
+    /**
+     * Make the start marker beat one. With Snap on the marker already sits on a grid line, so this
+     * only moves the accent; with Snap off it also moves the lines to the marker, for a grid the
+     * detector placed between the beats.
+     */
+    fun alignGridToStart() {
+        val beat = beatFrac()
+        if (beat <= 0f) return
+        val g = _grid.value
+        val anchor = _region.value.startFrac
+        val lineShift = GridAlign.lineShift(g.downbeatFrac, anchor, beat)
+        _grid.value = g.copy(downbeatFrac = anchor, enabled = true)
+        if (lineShift != 0f) followGridWithChords(lineShift)
+        resnapRegion()
+    }
+
+    /** Move beat one by [beats] (±1). The grid lines stay where they are; only the accent moves. */
+    fun shiftBeatOne(beats: Int) {
+        val beat = beatFrac()
+        if (beat <= 0f) return
+        val g = _grid.value
+        _grid.value = g.copy(
+            downbeatFrac = GridAlign.shiftByBeats(g.downbeatFrac, beats, beat, _countIn.value.beatsPerBar),
+            enabled = true,
+        )
+    }
+
+    /**
+     * Keep the chord lane on the beats after the grid lines moved by [delta]. Chords are cut on beat
+     * lines, so a timeline the user edited is shifted along with the grid and keeps their changes;
+     * an unedited one is simply analysed again against the new beats.
+     */
+    private fun followGridWithChords(delta: Float) {
+        val edited = currentTrack?.chords ?: emptyList()
+        if (edited.isNotEmpty()) {
+            commitChords(ChordEdits.shift(edited, delta, CHORD_MIN_WIDTH))
+        } else {
+            (state.value as? LooperUiState.Loaded)?.audio?.let { detectChords(it) }
+        }
     }
 
     /** Tap this in time with the music to estimate BPM from the tap intervals. */

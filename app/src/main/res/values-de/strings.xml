@@ -150,6 +150,8 @@
     <string name="help_playhead_body">Tippe irgendwo in den freien Bereich, um die Abspielposition dorthin zu setzen, oder ziehe nahe der Abspiellinie, um zu scrubben.</string>
     <string name="help_countin_title">Mit Einzähler starten</string>
     <string name="help_countin_body">Halte Abspielen gedrückt, um vor dem Ton einen Einzähler zu hören; ein normaler Tipp startet sofort. Unter Optionen → Klick stellst du Taktart und Länge ein, lässt den Klick während der Schleife weiterlaufen und wählst Lautstärke und Klanghöhe.</string>
+    <string name="help_beat_one_title">Die Eins setzen</string>
+    <string name="help_beat_one_body">Die kräftigste Rasterlinie ist die Eins, auf der der Klick betont wird. Liegt sie auf dem falschen Schlag, setze den Startmarker auf den Schlag, den du als Eins hörst, tippe auf die BPM-Anzeige und wähle Raster am Startmarker ausrichten. Einen Schlag früher und Einen Schlag später verschieben sie jeweils um einen Schlag.</string>
     <string name="help_zoom_title">Zoomen &amp; scrollen</string>
     <string name="help_zoom_body">Ziehe mit zwei Fingern auf, um die Wellenform zu vergrößern oder zu verkleinern. Im gezoomten Zustand ziehst du im freien Bereich zum Scrollen oder nutzt den Übersichtsstreifen unten.</string>
     <string name="help_save_loop_title">Loop speichern</string>
@@ -224,6 +226,9 @@
     <string name="bpm_value">%1$d BPM</string>
     <string name="menu_double_tempo">Tempo verdoppeln</string>
     <string name="menu_halve_tempo">Tempo halbieren</string>
+    <string name="menu_align_grid">Raster am Startmarker ausrichten</string>
+    <string name="menu_beat_one_earlier">Eins: einen Schlag früher</string>
+    <string name="menu_beat_one_later">Eins: einen Schlag später</string>
     <!-- "Speed" bleibt stehen: daneben steht die BPM-Anzeige, und "Tempo" hieße dort zweierlei. -->
     <string name="speed_label">Speed %1$s×</string>
     <string name="speed_popup_label">"Speed  %1$s×"</string>

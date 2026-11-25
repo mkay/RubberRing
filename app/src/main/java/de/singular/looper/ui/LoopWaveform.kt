@@ -61,7 +61,8 @@ private class WaveformColors(
     val minimapTrack: Color,
     val minimapWindow: Color,
     val gridLine: Color,
-    val downbeatLine: Color,
+    val downbeatLine: Color, // a beat line (the name predates bar lines)
+    val barLine: Color,      // beat one of each bar
     val chordLaneBg: Color, // scrim behind the chord lane so names stay readable over the wave
     val chordText: Color,   // chord name
 )
@@ -77,6 +78,7 @@ private val DarkWaveformColors = WaveformColors(
     minimapWindow = Color(0xB3FFFFFF),
     gridLine = Color(0x22FFFFFF),
     downbeatLine = Color(0x55FFFFFF),
+    barLine = Color(0x99FFFFFF),
     chordLaneBg = Color(0x73101418),
     chordText = Color(0xFFE8EAED),
 )
@@ -93,6 +95,7 @@ private val LightWaveformColors = WaveformColors(
     minimapWindow = Color(0x99000000),
     gridLine = Color(0x12000000),
     downbeatLine = Color(0x38000000),
+    barLine = Color(0x73000000),
     chordLaneBg = Color(0x73FFFFFF),
     chordText = Color(0xFF121418),
 )
@@ -155,6 +158,7 @@ fun LoopWaveform(
     gridOffsetFrac: Float,
     gridIntervalFrac: Float, // 0 = no grid
     gridLinesPerBeat: Int, // subdivision; every Nth line is a beat (drawn brighter)
+    gridBeatsPerBar: Int, // every Nth beat is beat one (drawn brightest), so its position can be seen
     chords: List<ChordSpan>, // detected chord timeline; empty until analysis lands
     noteNaming: NoteNaming, // how the chord lane spells its roots (B vs the German H)
     initialZoom: Float,
@@ -456,11 +460,18 @@ fun LoopWaveform(
                     val gx = fracToX(f)
                     if (gx < 0f || gx > w) continue
                     val isBeat = gridLinesPerBeat <= 1 || k % gridLinesPerBeat == 0
+                    // Line 0 is the anchor, which is beat one; floorMod keeps lines before it in step.
+                    val linesPerBar = gridLinesPerBeat.coerceAtLeast(1) * gridBeatsPerBar.coerceAtLeast(1)
+                    val isBar = Math.floorMod(k, linesPerBar) == 0
                     drawLine(
-                        color = if (isBeat) colors.downbeatLine else colors.gridLine,
+                        color = when {
+                            isBar -> colors.barLine
+                            isBeat -> colors.downbeatLine
+                            else -> colors.gridLine
+                        },
                         start = Offset(gx, 0f),
                         end = Offset(gx, h),
-                        strokeWidth = if (isBeat) 2f else 1f,
+                        strokeWidth = if (isBar) 3f else if (isBeat) 2f else 1f,
                     )
                 }
             }

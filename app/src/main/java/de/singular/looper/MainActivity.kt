@@ -1748,6 +1748,10 @@ private fun QuickHelpDialog(onDismiss: () -> Unit) {
                     stringResource(R.string.help_countin_body),
                 )
                 HelpItem(
+                    stringResource(R.string.help_beat_one_title),
+                    stringResource(R.string.help_beat_one_body),
+                )
+                HelpItem(
                     stringResource(R.string.help_roots_title),
                     stringResource(R.string.help_roots_body),
                 )
@@ -2122,6 +2126,8 @@ private fun LoadedContent(
                 gridOffsetFrac = grid.downbeatFrac,
                 gridIntervalFrac = if (grid.enabled) intervalFrac else 0f,
                 gridLinesPerBeat = grid.subdivision,
+                // The count-in's beats per bar is the track's meter, as it is for the click accent.
+                gridBeatsPerBar = countIn.beatsPerBar,
                 chords = if (showChords) chords?.spans ?: emptyList() else emptyList(),
                 noteNaming = noteNaming,
                 chordEditMode = chordEditMode && showChords,
@@ -3221,6 +3227,23 @@ private fun BeatControls(
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.menu_halve_tempo)) },
                                 onClick = { viewModel.halveTempo(); octaveMenu = false },
+                            )
+                            // Which beat is beat one. The detector finds the beats but not the bar,
+                            // so the accent can land on any beat; these put it where the user hears it.
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_align_grid)) },
+                                onClick = { viewModel.alignGridToStart(); octaveMenu = false },
+                            )
+                            // The two steps leave the menu open, so beat one can be walked along
+                            // the bar while the loop plays until the accent sounds right.
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_beat_one_earlier)) },
+                                onClick = { viewModel.shiftBeatOne(-1) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_beat_one_later)) },
+                                onClick = { viewModel.shiftBeatOne(1) },
                             )
                         }
                     }

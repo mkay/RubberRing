@@ -77,4 +77,24 @@ class ChordEditsTest {
         assertEquals(base, ChordEdits.moveBoundary(base, 2, 0.6f, 0.02f)) // no span after last
         assertEquals(base, ChordEdits.merge(base, 2))
     }
+
+    @Test fun shiftMovesInnerBoundariesAndPinsTheEdges() {
+        val out = ChordEdits.shift(base, 0.05f, minWidth = 0.02f)
+        assertEquals(0f, out[0].startFrac)            // the file's start stays put
+        assertEquals(0.30f, out[0].endFrac, 1e-6f)
+        assertEquals(0.30f, out[1].startFrac, 1e-6f)  // neighbours still meet
+        assertEquals(0.55f, out[1].endFrac, 1e-6f)
+        assertEquals(1f, out[2].endFrac)              // and so does its end
+        assertEquals(base.map { it.chord }, out.map { it.chord })
+    }
+
+    @Test fun shiftDropsASpanPinnedBelowMinWidth() {
+        val spans = listOf(span(0f, 0.01f, 0), span(0.01f, 1f, 7))
+        val out = ChordEdits.shift(spans, -0.02f, minWidth = 0.005f)
+        assertEquals(listOf(span(0f, 1f, 7)), out)
+    }
+
+    @Test fun shiftByZeroIsANoOp() {
+        assertEquals(base, ChordEdits.shift(base, 0f, 0.02f))
+    }
 }

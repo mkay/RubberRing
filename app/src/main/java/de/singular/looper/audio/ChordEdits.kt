@@ -61,6 +61,19 @@ object ChordEdits {
         return (spans + ChordSpan(gapStart, gapEnd, chord)).sortedBy { it.startFrac }
     }
 
+    /**
+     * Move every boundary by [delta], for when the beat grid under the timeline moves. Boundaries at
+     * the very start or end of the file stay pinned there: they mark the file's edges, not a beat.
+     * A span squeezed below [minWidth] by the pinning is dropped.
+     */
+    fun shift(spans: List<ChordSpan>, delta: Float, minWidth: Float): List<ChordSpan> {
+        if (delta == 0f) return spans
+        fun move(f: Float) = if (f <= 0f || f >= 1f) f else (f + delta).coerceIn(0f, 1f)
+        return spans
+            .map { it.copy(startFrac = move(it.startFrac), endFrac = move(it.endFrac)) }
+            .filter { it.endFrac - it.startFrac >= minWidth }
+    }
+
     /** Merge span [index] with the following span, keeping span [index]'s chord. */
     fun merge(spans: List<ChordSpan>, index: Int): List<ChordSpan> {
         if (index < 0 || index >= spans.size - 1) return spans
